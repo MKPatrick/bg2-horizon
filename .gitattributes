@@ -1,0 +1,10 @@
+# One line ending everywhere. Without this, every commit from Windows warns
+# that LF will be replaced by CRLF, and a checkout on another machine shows
+# the whole tree as changed.
+* text=auto eol=lf
+
+# Built and binary files are never text.
+*.png binary
+*.ogg binary
+*.hmod binary
+*.hnmod binary
