@@ -43,6 +43,18 @@ fn is_gadget(item: &str) -> bool {
     ids::GADGETS.contains(&item)
 }
 
+/// Whether to write a line to the game's log for each gadget click.
+///
+/// Off unless `BG2_DEBUG` is set in the environment the game starts in. It
+/// earned its keep once already: the first in-game try did nothing and said
+/// nothing, and one line per click — which hook fired, what the player looked
+/// like, what the gadget held — found it at once. Horizon's own output goes
+/// to the log beside the control socket, not to `logs/latest.log`.
+fn debug() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("BG2_DEBUG").is_some())
+}
+
 /// `BaseGadget.use`: one right click with a gadget, from either use hook.
 ///
 /// `hit` is the block and face a use-on hook gave — in reach, that is
@@ -56,22 +68,22 @@ fn clicked(
     stack: &ItemStack,
     hit: Option<([i32; 3], [i32; 3])>,
 ) -> bool {
-    // While the port has had no in-game run yet, every click says what it did
-    // in the game's log: whether the hook fired at all, which way it went and
-    // why nothing happened. Take it out once the milestones are checked in a
-    // world (TODO.md, M2).
     let sneaking = host.sneaking();
-    eprintln!(
-        "buildinggadgets2: click item={} sneaking={sneaking} hit={hit:?}          player={:?} state={:?}",
-        stack.item,
-        host.acting_player().map(|p| (p.name, p.position, p.yaw, p.pitch, p.entity_id)),
-        state::block_state(host, stack),
-    );
+    if debug() {
+        eprintln!(
+            "buildinggadgets2: click item={} sneaking={sneaking} hit={hit:?}              player={:?} state={:?}",
+            stack.item,
+            host.acting_player().map(|p| (p.name, p.position, p.yaw, p.pitch)),
+            state::block_state(host, stack),
+        );
+    }
 
     // `Player.isShiftKeyDown`, which the Java mod branches on in `use`.
     if sneaking {
         let picked = build::pick(host, stack, hit.map(|(pos, _)| pos));
-        eprintln!("buildinggadgets2: pick -> {picked:?}");
+        if debug() {
+            eprintln!("buildinggadgets2: pick -> {picked:?}");
+        }
         let Some(state) = picked else {
             return false;
         };
@@ -80,11 +92,15 @@ fn clicked(
         let mut held = stack.clone();
         state::set_block_state(host, &mut held, &state);
         let written = build::put_back(host, held);
-        eprintln!("buildinggadgets2: picked {state}, written back = {written}");
+        if debug() {
+            eprintln!("buildinggadgets2: picked {state}, written back = {written}");
+        }
         return true;
     }
     let built = build::build(host, stack, hit);
-    eprintln!("buildinggadgets2: build -> {built:?}");
+    if debug() {
+        eprintln!("buildinggadgets2: build -> {built:?}");
+    }
     built.is_some()
 }
 

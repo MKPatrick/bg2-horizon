@@ -104,6 +104,10 @@ HELPER_API: dict[str, int] = {
     "edit_blocks": 126,
     "block_collision": 363,
     "update_signal_neighbors": 38,
+    "block": 20,
+    "carried_stack": 39,
+    "raycast": 116,
+    "camera": 363,
     "entity": 379,
     "living": 379,
     # "Entity and level handles" (#7387) landed together.
@@ -121,6 +125,10 @@ UNSTAMPED_HELPERS = frozenset(
         "sneaking",
         "block_name_in_tag",
         "component",
+        "client_state",
+        "client_block_obstruction",
+        "tell",
+        "equipment",
         "living_equipment",
         "living_set_equipment",
         "action_bar",
@@ -207,7 +215,11 @@ def known_hooks(horizon: Path, rep: Report) -> tuple[set[str], str]:
         return set(), "nothing"
     data = json.loads(catalog.read_text(encoding="utf-8"))
     names = {h["name"] for h in data.get("hooks", [])}
-    names.add("render")
+    # Methods the generated trait has that `native-hooks.json` does not: a
+    # trait mod reaches a few things a mixin bundle cannot. `render` hands
+    # over the `RenderHooks`, and `world_primitives` is the trait's own
+    # drawing API (docs/native-mods.md, "World primitives").
+    names |= {"render", "world_primitives"}
 
     render = horizon / "crates/horizon-client-render/src/gfx/native_render/generated.rs"
     if render.is_file():

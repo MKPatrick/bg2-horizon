@@ -93,9 +93,8 @@ needs is in [docs/hook-map.md](docs/hook-map.md).
       `builds_a_line_towards_the_player_and_stops_one_short` predicted.
       In survival with 5 stone: `placed: 5, missing: 4` and all 5 consumed.
 - [ ] Still unchecked: that a build survives a save and reload.
-- [ ] Take the per-click `eprintln!` diagnostic out of `lib.rs` (it writes a
-      line to the game's log on every gadget click; it earned its keep finding
-      the hook was firing, and M3 will want it again).
+- [x] The per-click diagnostic is behind `BG2_DEBUG` now, off by default
+      (docs/developing.md says how to turn it on).
 
 ### What M2 does differently from the Java mod
 
