@@ -27,28 +27,30 @@ needs is in [docs/hook-map.md](docs/hook-map.md).
       against an own copy of Java Edition 26.3, then the first real
       `native-build` and a play test. Neither is installed here.
 
-## M1 — It loads
+## M1 — It loads — **done except the in-game check**
 
-- [ ] `tools/make_content_mod.py`: read the Java mod's jar (or
-      `src/main/resources`) and write `bg2-content` — models, textures, lang,
-      recipes, tags — the way AE2's tool does it. 240 asset files and 37
-      generated resources to convert.
-- [ ] Convert the item models: the gadgets are flat `item/generated` models, so
-      they should carry over nearly unchanged.
-- [ ] Convert the recipes from 26.1.2 to 26.3's format.
-- [ ] Decide the render block's look: it is never seen in an inventory and is
-      replaced within a tick, so a `barrier`-like template with no collision is
-      enough.
+- [x] `tools/make_content_mod.py`: writes `bg2-content` from the Java mod's
+      `src/` tree, 100 files. The textures come from parsing the models, not
+      from a list. Leaves out Building Gadgets 1's unregistered construction
+      blocks and paste, and the Patchouli book Horizon has no reader for.
+- [x] The item models carried over unchanged: the data generator already wrote
+      26.3's formats (`assets/<ns>/items/<id>.json`, singular `recipe` and
+      `loot_table` folders, results as `{"id": ...}`).
+- [x] The 6 `c:` item tags the recipes use, which Horizon does not ship.
+- [x] `sounds.json` for the `beep` event.
 - [x] The 7 items, the 2 blocks, the creative tab and the template manager's
-      menu declared, and the whole content mod passing
-      `cargo horizon-mod check`.
-- [ ] Pack `bg2-content` into `native/buildinggadgets2/data/bg2-content.hmod`
-      and load it from the mod at start, so one `.hnmod` holds everything.
-- [ ] Decide each gadget's real template: they are `minecraft:stick` with
-      `max_stack_size` 1 for now, which is enough to hold them but gives them a
-      stick's behaviour.
-- [ ] Check in game: the creative tab, the 8 items with the right models and
-      names, the template manager placeable.
+      menu declared, and the content passing `cargo horizon-mod check`.
+- [x] Real templates: `minecraft:compass` for the gadgets and `minecraft:paper`
+      for the template and redprint, both inert — M0's `minecraft:stick` was
+      furnace fuel, so a gadget could be burnt. The exchanger carries
+      `minecraft:enchantable {"value": 3}`, as `.enchantable(3)` gives it.
+- [x] `tools/pack_mod.py`: content and code in one `.hmod`, passing
+      `cargo horizon-mod check` as `native-mod … for 26.3`.
+- [ ] **Needs the launcher:** check in game — the creative tab, the 8 items
+      with the right models and names, the template manager placeable, a gadget
+      craftable.
+- [ ] The render block's look is `minecraft:barrier` with hardness 20. Enough
+      until M10 puts the build animation on it; revisit then.
 
 ## M2 — One block placed
 

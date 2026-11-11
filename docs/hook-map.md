@@ -25,12 +25,22 @@ Horizon takes native mods two ways, and this matters for everything below.
 Building Gadgets 2 is a trait mod. Every line of the mapping below is a named
 hook point, so nothing needs the source rewritten, and the trait route gives:
 
-- **No pin.** A mixin bundle must name the Horizon commit it was built against,
-  because the file it patches can move (`E_MODULE`, `E_TARGET_NOT_FOUND`). A
-  trait mod declares `"hooks": N` and the launcher builds it on any Horizon
-  whose `NATIVE_HOOKS_API` is N or later — hook points are only ever added.
-  Horizon's own native mods (Zoom, the FPS counter, the minimap) are made this
-  way so they need no re-release per Nightly.
+- **No pin while developing.** A mixin bundle must name the Horizon commit it
+  was built against, because the file it patches can move (`E_MODULE`,
+  `E_TARGET_NOT_FOUND`). A trait mod declares `"hooks": N` and a build from the
+  folder compiles against whatever Horizon the instance plays — hook points are
+  only ever added, so a mod builds on any Horizon at N or later. Horizon's own
+  native mods (Zoom, the FPS counter, the minimap) are made this way so they
+  need no re-release per Nightly.
+
+  A **published** file is stricter, which is easy to miss: its two manifests
+  must name the same commit, or the reader refuses it with *"native manifest and
+  mixin identity/revision differ"* (`horizon_mods::index::native`). So
+  `horizon-native.json`'s `horizon` and `[compatibility] horizon_revision` both
+  carry the commit the mod was tested on, and `hooks` is what still lets the
+  launcher build it on a later one. `tools/pack_mod.py` adds that pin to the
+  copy it packs — as the launcher does to its own copy of a mod it builds — and
+  the bundle in this repository stays unpinned.
 - **It can be switched off** in Options → Mods without a rebuild. Mixin code
   cannot.
 - **It compiles locally.** `tools/local_check.py` points the crate's
@@ -61,6 +71,8 @@ content mod's ids are what a save and a joining client check against.
 | `DeferredRegister` BLOCKS, `render_block` + `template_manager` | `horizon/block/*.json` | — |
 | `BlockItem` for the template manager | the block's own `"item": true` (the default a file sets). A block's item is **not** a separate `horizon/item/` file; `render_block` sets `"item": false` so it has none | — |
 | `Item.Properties.stacksTo(1)` | the item file's `"max_stack_size": 1`. **Not** a `minecraft:max_stack_size` component: Horizon refuses that with *"component … : set max_stack_size instead"* (`content.rs`'s `check_components`), which `cargo horizon-mod build` reports | — |
+| `Item.Properties.enchantable(3)` on the exchanger | the item file's `"components": {"minecraft:enchantable": {"value": 3}}` | — |
+| the gadgets' template | `minecraft:compass`, and `minecraft:paper` for the template and redprint: inert items with no use action. Not `minecraft:stick`, which is furnace fuel — a template's components come with it, so a fuel template makes the gadget burnable | — |
 | `BG2DataComponents`: 12 fixed, 7 toggles, 6 numbers, 3 more | `component_types`, then `component` / `set_component` / `remove_component`. Implemented, with tests, in `api/src/ids.rs` | 65 |
 | `BlockEntityType` `RenderBlockBE`, `TemplateManagerBE` | `block_entity`, `block_entity_ticks`, `block_entity_tick` | 15 |
 | `TemplateManagerContainer` (`MenuType`) | `block_entity_container` + `horizon/menu/template_manager.json` | 16, 17 |

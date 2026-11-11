@@ -1,11 +1,11 @@
-# The content mod packed by `cargo horizon-mod build`, and the copy the
-# bundle ships. Both are built, not written by hand.
+# Built, not written by hand: the content mod `cargo horizon-mod build` packs,
+# and the combined .hmod tools/pack_mod.py writes.
 bg2-content/target/
-native/*/data/*.hmod
+dist/
 
 # The trait mod's local build output (`tools/local_check.py`).
-native/*/api/target/
-native/*/api/Cargo.lock
+mixins/*/api/target/
+mixins/*/api/Cargo.lock
 
 # Editors and OSes
 .idea/

@@ -448,7 +448,7 @@ def main() -> int:
     repo = Path(__file__).resolve().parent.parent
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--horizon", type=Path, default=repo.parent / "horizon-main")
-    ap.add_argument("--bundle", type=Path, default=repo / "native/buildinggadgets2")
+    ap.add_argument("--bundle", type=Path, default=repo / "mixins/buildinggadgets2")
     args = ap.parse_args()
 
     rep = Report()

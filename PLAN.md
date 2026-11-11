@@ -95,9 +95,15 @@ makes it the whole mod.
 - **A trait mod, not a mixin bundle.** Everything in the mapping is a named hook
   point, and the trait route is unpinned, switchable in game and locally
   compilable. See [docs/hook-map.md](docs/hook-map.md).
-- **One `.hnmod`, no separate content mod.** The packed `bg2-content.hmod` ships
-  inside the bundle and is loaded at start, as AE2 does it. A player installs
-  one file.
+- **One combined `.hmod`, content and code together.** Horizon reads a `.hmod`
+  that holds both manifests as content plus code, so `tools/pack_mod.py` packs
+  `bg2-content` and the bundle into one file and a player installs one thing.
+  AE2's port predates this and packs a `.hmod` inside its `.hnmod`, loading it
+  with `native_data!`; none of that is needed.
+- **The repository's bundle stays unpinned, the packed copy is pinned.** A
+  folder build compiles against whatever Horizon the instance plays, which is
+  the point of a hook-point mod. A published file must name the commit in both
+  manifests, so the packer adds it to the copy it writes.
 - **Blocks and items are declared in files, not in code.** A trait mod cannot
   reach `horizon_mods::content::{Item, Block}`, so the `items` and `blocks`
   hooks are not available to it. The content mod's files are the declaration,
@@ -179,3 +185,48 @@ done, and two things turned out differently from Round 0's reading.
 
 Left for the user: the Horizon commit the mod is tested on, and a machine with
 a JDK and the launcher for the first real build.
+
+### Round 2 (2026-11-11): M1, the mod's own look
+
+Building Gadgets 2's data generator already writes the formats 26.3 reads, so
+carrying the look over was mostly a matter of copying the right files and
+supplying the three things the Java loader gave it for free.
+
+- **`tools/make_content_mod.py`** writes `bg2-content` from the Java mod's
+  `src/` tree: 100 files — the 8 item definitions, the item and block models,
+  the blockstates, 5 languages, 6 recipes, 2 loot tables, the recipe
+  advancements, the tags, and the textures. The textures are not listed in the
+  script: the models are parsed and whatever they name is taken, so a model
+  that gains a layer needs no change here. It leaves out Building Gadgets 1's
+  construction blocks, paste and paste containers, which are still in
+  `src/main/resources` but which `Registration.java` does not register, and the
+  Patchouli book, which Horizon has no reader for.
+- **The `c:` tags had to be written.** The recipes use `#c:ingots/iron` and
+  five others. Those are NeoForge's convention, not vanilla's, and Horizon
+  ships none of them — AE2's port ships its own too. Without them every recipe
+  would match nothing, so the script writes the six from the vanilla items they
+  stand for, and the recipes stay exactly as the Java mod wrote them.
+- **`sounds.json`** maps the `beep` event to its file.
+- **The gadgets are no longer sticks.** M0 gave them `minecraft:stick` to have
+  something that holds; a stick is furnace fuel, so a gadget could be burnt.
+  They are `minecraft:compass` now, and the template and redprint
+  `minecraft:paper` — inert items with no use action and no fuel. The exchanger
+  also carries `minecraft:enchantable {"value": 3}`, as the Java mod's
+  `.enchantable(3)` gives it, which its `mining_loot` tag needs.
+- **One combined `.hmod`.** `docs/api/mod-files.md` says a `.hmod` holding both
+  manifests is read as content plus code, so `tools/pack_mod.py` writes one:
+  112 content files and 6 native entries, 132 KB. It enforces the reader's own
+  rules, which is how `api/Cargo.lock` turned out not to be allowed (only
+  `.rs` and `.toml` under the bundle).
+- **The pin is a packaging matter, not a development one.** The combined file
+  was refused with *"native manifest and mixin identity/revision differ"*: a
+  published file must name the commit in `horizon-native.json` *and*
+  `[compatibility] horizon_revision`. A folder build does not. So the packer
+  adds the pin to the copy it packs, as the launcher does to its own copy, and
+  the repository's bundle stays unpinned.
+- **Verified:** `cargo horizon-mod check` passes the combined file as
+  `native-mod … for 26.3`. And the content inside it really is checked — broke
+  one declaration on a copy and the check refused the whole file.
+
+Still nothing clicked in a world: that needs the launcher and a JDK. M2 is the
+first milestone where a gadget does something.

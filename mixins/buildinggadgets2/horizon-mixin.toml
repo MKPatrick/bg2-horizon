@@ -15,16 +15,20 @@
 id = "buildinggadgets2"
 version = "0.1.0"
 
-# Unpinned on purpose: the mod hooks only Horizon's named hook points, so
-# `hooks` in horizon-native.json names the hook-point API it needs and the
-# launcher builds it on that version of Horizon or any later one. Pinning a
-# commit here would give that up for nothing.
+# Unpinned on purpose. The mod hooks only Horizon's named hook points, so
+# `hooks` in horizon-native.json names the hook-point API it needs and a build
+# from this folder compiles against whatever Horizon the instance plays.
+#
+# A *published* file is different: its two manifests must name the same commit,
+# so tools/pack_mod.py adds `[compatibility] horizon_revision` to the copy it
+# packs, as the launcher does to its own copy. This file stays unpinned.
 # [compatibility]
 # horizon_revision = "<40 hex digits>"
 
 [api]
 path = "api"
 
-# TODO (M1): the content mod, packed by `cargo horizon-mod build` from
-# ../../bg2-content into data/bg2-content.hmod, loaded by the mod at start so
-# one .hnmod holds the models and textures too.
+# The content mod is not loaded from here: tools/pack_mod.py puts ../../bg2-content
+# and this bundle into one combined .hmod, which Horizon reads as content plus
+# code (docs/api/mod-files.md). So there is no data/bg2-content.hmod to carry,
+# and no native_data! call to load it — the workaround AE2's port needs.

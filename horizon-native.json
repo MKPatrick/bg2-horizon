@@ -3,7 +3,7 @@
   "hooks": 65,
   "horizon": "TODO-pin-the-commit-this-was-tested-on",
   "id": "buildinggadgets2",
-  "mixins": "TODO-unused-by-a-trait-mod-see-docs-hook-map",
+  "mixins": "TODO-pin-the-horizon-mixins-commit-at-release",
   "schema": 1,
   "version": "0.1.0"
 }

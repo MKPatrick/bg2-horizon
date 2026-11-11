@@ -5,11 +5,12 @@ An unofficial, in-progress port of
 direwolf20) to [Horizon](https://github.com/horizon-rust/horizon), as a **native
 mod**: Rust compiled into the game, with no Java.
 
-> **Status: M0 done, M1 next.** Nothing is playable yet. What exists: the
-> Java → Horizon hook mapping, a trait mod that compiles against Horizon and
-> registers the gadgets' data components, and a content mod that passes
-> Horizon's own registry check. [PLAN.md](PLAN.md) has the milestones and
-> [TODO.md](TODO.md) the work list.
+> **Status: M1 done, M2 next.** Not playable yet — no gadget does anything
+> when you click. What exists: the Java → Horizon hook mapping, a trait mod
+> that compiles against Horizon and registers the gadgets' data components,
+> the Java mod's models, textures, names, recipes and loot carried over, and a
+> combined `.hmod` that passes Horizon's own registry check. [PLAN.md](PLAN.md)
+> has the milestones and [TODO.md](TODO.md) the work list.
 
 ## Why a rewrite and not a jar
 
@@ -35,15 +36,16 @@ Rust against Horizon's hooks. No original code runs.
 
 | Path | What it is |
 |---|---|
-| `native/buildinggadgets2/` | the native mod: `horizon-mixin.toml` and the `api/` crate that implements `Hooks` |
-| `native/buildinggadgets2/api/src/ids.rs` | the mod's ids and its data components, with tests |
-| `native/buildinggadgets2/data/bg2-content.hmod` | `bg2-content` packed, loaded by the mod at start, so one `.hnmod` holds everything (built, not committed) |
-| `bg2-content/` | the gadgets' and blocks' declarations, models, textures and recipes |
+| `mixins/buildinggadgets2/` | the native mod: `horizon-mixin.toml` and the `api/` crate that implements `Hooks`. Named after the mod id because that is the path a packed file must use |
+| `mixins/buildinggadgets2/api/src/ids.rs` | the mod's ids and its data components, with tests |
+| `bg2-content/` | the gadgets' and blocks' declarations, and the models, textures, names, recipes and loot carried over from the Java mod |
+| `dist/buildinggadgets2.hmod` | content and code in one file, what a player installs (built, not committed) |
 | `horizon-native.json` | the registry manifest: the game version, the hooks API and the commit the mod was tested on |
 | `docs/hook-map.md` | every part of the Java mod and the Horizon hook it lands on |
 | `tools/check_bundle.py` | checks the bundle and the manifest against a Horizon tree before a build |
 | `tools/local_check.py` | `cargo check`/`cargo test` the mod against a local Horizon tree |
-| `tools/make_content_mod.py` | regenerates `bg2-content` from the Java mod's jar (not written yet) |
+| `tools/make_content_mod.py` | regenerates `bg2-content` from the Java mod's own resources |
+| `tools/pack_mod.py` | packs content and code into one `.hmod` |
 | `PLAN.md`, `TODO.md` | the milestones, and the work list under them |
 
 ## What is being ported
@@ -74,8 +76,12 @@ The mod is unpinned: it declares the hook-point API it needs (`hooks` in
 or later, so it does not need a new release for every Nightly.
 
 ```bash
-horizon-launcher native-build native/buildinggadgets2 --instance <instance> --trust-native-code
+horizon-launcher native-build mixins/buildinggadgets2 --instance <instance> --trust-native-code
 ```
+
+A build from the folder is unpinned: it compiles against whatever Horizon the
+instance plays. A *published* file must name the commit in both of its
+manifests, so `tools/pack_mod.py` adds the pin to the copy it packs.
 
 ### Checking it without a native build
 
@@ -90,11 +96,18 @@ python tools/check_bundle.py
 python tools/local_check.py --tests
 ```
 
-The content mod is built and checked with Horizon's own tool, from
+The content side is built and checked with Horizon's own tool, from
 `bg2-content`:
 
 ```bash
 cargo horizon-mod build && cargo horizon-mod check target/horizon-mod/buildinggadgets2.hmod
+```
+
+And the whole thing — content and code in one file, which is what a player
+installs — with:
+
+```bash
+python tools/pack_mod.py && cargo horizon-mod check dist/buildinggadgets2.hmod
 ```
 
 ## Differences from the Java mod

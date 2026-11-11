@@ -1,4 +1,7 @@
 {
-  "template": "minecraft:stick",
-  "max_stack_size": 1
+  "template": "minecraft:compass",
+  "max_stack_size": 1,
+  "components": {
+    "minecraft:enchantable": { "value": 3 }
+  }
 }
