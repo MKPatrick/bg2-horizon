@@ -14,7 +14,7 @@
 
 use horizon_client::mod_api::{
     ComponentTypesEvent, Flow, Hooks, Host, ItemStack, PerformCommandEvent,
-    RegisterCommandsEvent, UseItemEvent, UseItemOnEvent,
+    RegisterCommandsEvent, UseItemEvent, UseItemOnEvent, WorldPrimitivesEvent,
 };
 
 pub mod build;
@@ -22,6 +22,7 @@ pub mod command;
 pub mod host_world;
 pub mod ids;
 pub mod modes;
+pub mod preview;
 pub mod ray;
 pub mod runs;
 pub mod state;
@@ -95,6 +96,15 @@ impl Hooks for BuildingGadgets2 {
     /// [`ids::component_ids`].
     fn component_types(&self, event: &mut ComponentTypesEvent<'_>) {
         event.types.extend(ids::component_ids());
+    }
+
+    /// The ghost preview, drawn once a frame while the world draws.
+    ///
+    /// This is the one hook that runs on the client rather than the server,
+    /// and it reads the client's own world: see `preview.rs` for what that
+    /// changes.
+    fn world_primitives(&self, host: &dyn Host, event: &mut WorldPrimitivesEvent<'_>) {
+        preview::draw(host, event.primitives);
     }
 
     /// `/bg2`, which reaches a gadget's mode and settings until the screens

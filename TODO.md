@@ -159,26 +159,52 @@ needs is in [docs/hook-map.md](docs/hook-map.md).
 
 ## M4 — The preview
 
-- [ ] Read AE2's `mixins/ae2/ae2_draw.rs` first: the translucent quad pass it
-      already runs from `native_world_drawn` is the same problem.
-- [ ] `native_render_needs`: ask for `world_depth`, and only while something is
+The preview has two halves. The first shows the right blocks in the right
+places; the second makes them look like blocks.
+
+### Half one: where the build goes — **done, in-game check pending**
+
+- [x] The modes run on the client too, over `Host::block`, so the preview is
+      the same geometry the server builds with (`preview.rs`).
+- [x] `Host::raycast` for the look: the client's own view pick, which crosses
+      a block's outline as vanilla does and reaches the gadget's full range.
+      `NativeHit` carries no face, so `face_of` takes it from the hit point.
+- [x] A translucent box per ghost and one outline around the build, through
+      `world_primitives` — which a trait mod reaches, where a mixin bundle
+      would not.
+- [x] The Exchanger's ghosts in their own colour.
+- [ ] **In game:** that the preview shows exactly what the click then places.
+
+### Half two: textured ghost blocks
+
+- [ ] Read AE2's `mixins/ae2/ae2_draw.rs` first: a translucent quad pass run
+      from `world_drawn`, with a per-quad block sprite, an ARGB colour and a
+      `behind` factor — the same problem, already solved once.
+- [ ] `render_needs`: ask for `world_depth`, and only while something is
       drawn.
-- [ ] The pass: vertex buffer, pipeline, bind groups, and the world's depth read
-      in the shader rather than bound (the world may draw at a lower resolution
-      than the frame).
-- [ ] Block sprites per quad (`native_block_sprites`), so a ghost carries the
-      real block's texture.
-- [ ] Build the quad set from a mode's block positions, with face culling
-      between neighbouring ghosts — the Java mod's `DireVertexConsumer` work.
-- [ ] Rebuild only when the target, the mode, the range or the settings change;
-      keep the buffer's capacity between frames.
-- [ ] The lines and boxes: the build's bounds, the anchor, the copy region, the
-      destruction box — through `world_primitives`, which a trait mod reaches,
-      so they need no pass of our own.
+- [ ] The pass itself: vertex buffer, pipeline, bind groups, and the world's
+      depth read in the shader rather than bound (the world may draw at a
+      lower resolution than the frame).
+- [ ] `block_sprites` per quad, so a ghost carries the real block's texture.
+- [ ] Face culling between neighbouring ghosts, which is what
+      `DireVertexConsumer` is for.
+- [ ] Rebuild the buffer only when the target, mode, range or settings
+      change; keep its capacity between frames.
 - [ ] The squished variant (`DireVertexConsumerSquished`) for the exchanger's
       overlay.
-- [ ] Check: the preview and the placement agree, exactly, in every mode.
-- [ ] Measure: a few thousand ghost blocks must not cost noticeable frames.
+- [ ] Measure: a few thousand ghosts must not cost noticeable frames.
+
+### What the client cannot answer exactly
+
+- [ ] `Host::level` is None on a client, so the preview reads block **names**
+      (`Host::block`) where the server reads whole states, and decides
+      "replaceable" from collision where the server uses the
+      `minecraft:replaceable` tag. Air and solid blocks agree; a tagged-but-
+      colliding block and Surface's "same block behind?" test can differ. The
+      server has the last word, so a build is never wrong — only the preview
+      can be a block out.
+- [ ] Protection (`may_build`) is not readable on a client either, so the
+      preview does not grey out a protected position.
 
 ## M5 — Undo
 
