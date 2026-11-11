@@ -20,12 +20,18 @@ needs is in [docs/hook-map.md](docs/hook-map.md).
       clean in 1m27s, and `--tests` runs the mod's own tests.
 - [x] Check the content mod with Horizon's own tool: `cargo horizon-mod build`
       and `check` both pass.
-- [ ] **Needs the user:** the Horizon commit the mod is tested on, for
-      `horizon-native.json`'s `horizon` (only needed to publish to the
-      registry, not to build).
-- [ ] **Needs a machine with a JDK 25 and the launcher:** `horizon-prepare`
-      against an own copy of Java Edition 26.3, then the first real
-      `native-build` and a play test. Neither is installed here.
+- [x] Pinned to the Horizon the launcher actually has:
+      `fdc87aecdbd116bf1e08adcd062fcbaea8c2e2ca` (nightly-2026-11-08) and
+      horizon-mixins `5a64af938ec86b00d53d16a408aabc0038fb3e57`, both read out
+      of the launcher's own `native/built.json`. `hooks` is 411, that
+      Nightly's `NATIVE_HOOKS_API`.
+- [x] The whole mod compiles and its tests pass against that Nightly's source,
+      not only against the `horizon-main` snapshot (which is ahead of every
+      released Nightly: API 415 against 411).
+- [ ] The first `native-build` and a play test. Everything it needs is in
+      place — the launcher, a prepared instance, its own Rust toolchain — but
+      the build compiles unsandboxed code and `--trust-native-code` is the
+      player's call, not an agent's (docs/native-mods.md says so outright).
 
 ## M1 — It loads — **done except the in-game check**
 
@@ -227,8 +233,12 @@ needs is in [docs/hook-map.md](docs/hook-map.md).
       position count and distance, the UUIDs a message names. Test on a
       dedicated server as a non-operator.
 - [ ] Commands need an operator level where they change someone else's world.
-- [ ] `can_build` / `may_build` once its API number is stamped, so region
-      protection mods are respected.
+- [ ] **The protection check is missing.** `BaseMode.isPosValid` calls
+      `level.mayInteract`, and Horizon's `Host::may_build` is not in any
+      released Nightly (it is on main with an unstamped `@API:can_build@`), so
+      `host_world.rs` allows every position. In single player that changes
+      nothing; on a server a gadget ignores claims and spawn protection. One
+      function to change once a Nightly carries it.
 - [ ] Performance: a large build, a large paste, a large preview — measured, not
       guessed.
 - [ ] Write down every difference from the Java mod in the README.

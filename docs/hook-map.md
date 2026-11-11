@@ -108,6 +108,24 @@ generated host trait and compiles, so the check is made. What the unstamped
 number means is only that the mod cannot name a version below the catalog's
 own — see the note on `hooks` below.
 
+## The Horizon this builds against
+
+`horizon-main`, the snapshot this port was read from, is **ahead of every
+released Nightly**: it is API 415, and the newest Nightly the launcher offers
+is nightly-2026-11-08 (`fdc87ae`) at API **411**. So 411 is the target, and
+two things on main are not available:
+
+| On main | On 411 | What the port does |
+|---|---|---|
+| `Host::may_build` → `can_build` | absent | no protection check. `host_world.rs`'s `may_place` allows every position, which matters on a server, not in single player |
+| `NativeBlockEdit.neighbour_updates` | absent (`edit_blocks` tells no neighbour) | `update_signal_neighbors` (API 38) is called for each block placed — `Level.updateNeighborsAt`, what flag 1 of `setBlock` does — so sand falls and redstone reacts as in Java |
+
+Both are one place in the code, and both come back by raising `hooks` when a
+Nightly carries them. Run `tools/check_bundle.py` and `tools/local_check.py`
+with `--horizon` pointing at **the tree the build will use**
+(`<launcher data>/native/source/<commit>/`), not at a newer snapshot: that is
+what caught these two.
+
 ## What `hooks` has to say
 
 A mod declares `"hooks": N` and the launcher builds it on any Horizon at N or

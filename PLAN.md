@@ -272,3 +272,48 @@ ray — is written out under M2 in TODO.md rather than left implicit.
 
 Nothing has been clicked in a game yet. That still needs a JDK 25 and the
 launcher.
+
+### Round 4 (2026-11-11): pinned to the Horizon that exists
+
+Looked for what the first native build needs and found most of it already on
+the machine: the launcher at `AppData/Local/Programs/Horizon Launcher`, a
+prepared instance `horizon`, the launcher's own Rust toolchain downloaded, JEI
+installed as a native mod, and two native builds already made today. So
+`horizon-prepare`, a JDK and a Minecraft copy are all done — none of what the
+README lists as prerequisites is missing.
+
+What it did turn up is the thing that mattered:
+
+- **`horizon-main` is ahead of every released Nightly.** It is API 415; the
+  newest Nightly the launcher offers is nightly-2026-11-08 (`fdc87ae`) at API
+  **411**. `horizon-main` is main, not a release, so the mod had been written
+  and checked against a Horizon nobody can build on.
+- **Compiling against the real tree found exactly two gaps**, which no amount
+  of reading would have: `Host::may_build` and
+  `NativeBlockEdit.neighbour_updates` are both on main and in neither case in
+  411. The launcher keeps the pinned source in
+  `native/source/<commit>/`, so `tools/local_check.py --horizon <that>` checks
+  against what the build will really use. That is now the way to run it.
+- **The protection check is gone for the moment.** `may_build` has an unstamped
+  `@API:can_build@` and no Nightly carries it, so `may_place` allows every
+  position. Single player is unaffected; a server is not, and it is one
+  function to restore.
+- **Neighbour updates were recovered a different way.** `edit_blocks` on 411
+  tells no neighbour, while the Java mod places through the normal path. So
+  each placed block gets `update_signal_neighbors` (API 38,
+  `Level.updateNeighborsAt`) afterwards, which is what flag 1 of `setBlock`
+  does. Sand falls and redstone reacts as before, at one helper call per
+  block — fine for a line of 31, and M6's large pastes will want the edit's
+  own `neighbour_updates` once it ships.
+- **The manifest is real now.** `horizon` and `mixins` came out of the
+  launcher's own `native/built.json`:
+  `fdc87aecdbd116bf1e08adcd062fcbaea8c2e2ca` and
+  `5a64af938ec86b00d53d16a408aabc0038fb3e57` (the same horizon-mixins AE2's
+  port pins). `hooks` is 411. `tools/pack_mod.py` needs no stand-in revision
+  any more, and `cargo horizon-mod check` passes the packed file with those
+  commits in its api string.
+
+47 tests pass and `cargo check` is clean against that Nightly's source. The
+build itself has not been run: it compiles unsandboxed code into the game, and
+`--trust-native-code` is the player's decision, which docs/native-mods.md says
+in as many words ("never an agent's").

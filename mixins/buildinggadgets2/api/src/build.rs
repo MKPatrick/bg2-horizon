@@ -186,6 +186,21 @@ pub fn build(
         }
     };
 
+    // `edit_blocks` on this Horizon tells no neighbour about the blocks it
+    // wrote, while the Java mod places through the normal path, where they
+    // hear: sand above a build falls, redstone beside it reacts. The nudge
+    // below is `Level.updateNeighborsAt` for each block placed, which is what
+    // flag 1 of `setBlock` does, so the two end up in the same state.
+    //
+    // It is one call per block, fine for a line of at most 31. A large paste
+    // (M6) wants the edit's own `neighbour_updates` instead, once a Nightly
+    // carries it.
+    if placed > 0 {
+        for pos in &affordable {
+            host.update_signal_neighbors(&player.dimension, *pos);
+        }
+    }
+
     // Fewer blocks written than paid for (a chunk went out of range, a run
     // fell outside the world): hand back what was not used.
     if !creative {
@@ -217,10 +232,10 @@ pub fn edit_for(state: &str, positions: &[[i32; 3]]) -> NativeBlockEdit {
                 only: None,
             })
             .collect(),
-        // The Java mod places through the normal path, so neighbours hear
-        // about it: a torch beside a block it removed falls, redstone
-        // updates. `edit_blocks` tells them only when asked.
-        neighbour_updates: true,
+        // `NativeBlockEdit` gains fields as the API grows, so it is built
+        // from the default rather than by naming every field: on the newest
+        // Nightly (411) it has `palette`, `filters` and `runs` only, and
+        // `neighbour_updates` is still on main.
         ..NativeBlockEdit::default()
     }
 }
@@ -268,7 +283,8 @@ mod tests {
         assert_eq!(edit.runs[0].height, 5);
         assert_eq!((edit.runs[0].x, edit.runs[0].y, edit.runs[0].z), (1, 0, 2));
         assert_eq!(edit.runs[0].block, 0);
-        assert!(edit.neighbour_updates);
+        // `neighbour_updates` is not a field on the Nightly this builds
+        // against; the neighbours are nudged after the edit instead.
     }
 
     #[test]

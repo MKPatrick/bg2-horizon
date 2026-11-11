@@ -68,13 +68,19 @@ impl Blocks for HostBlocks<'_> {
         self.host.level_height(self.level).unwrap_or((-64, 384))
     }
 
-    fn may_place(&self, pos: [i32; 3]) -> bool {
-        self.host.may_build(
-            self.player.0,
-            self.player.1,
-            self.dimension,
-            pos,
-            "place",
-        )
+    fn may_place(&self, _pos: [i32; 3]) -> bool {
+        // `BaseMode.isPosValid` calls `level.mayInteract(player, pos)`, which
+        // is spawn protection and what region-protection mods hook.
+        //
+        // Horizon's equivalent is `Host::may_build`, which asks every mod's
+        // `can_build`. It is **not in the newest Nightly** (2026-11-08,
+        // `NATIVE_HOOKS_API` 411) — it is on main with an unstamped
+        // `@API:can_build@`, so there is no released Horizon to build it
+        // against yet. Until a Nightly carries it, every position is allowed:
+        // in single player that changes nothing, but on a server a gadget
+        // ignores claims and spawn protection. TODO.md lists it under
+        // "Before release", and `host_world.rs` is the one place to change.
+        let _ = (&self.player, self.dimension);
+        true
     }
 }

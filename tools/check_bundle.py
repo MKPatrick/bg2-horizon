@@ -103,6 +103,7 @@ HELPER_API: dict[str, int] = {
     "set_component": 65,
     "edit_blocks": 126,
     "block_collision": 363,
+    "update_signal_neighbors": 38,
     "entity": 379,
     "living": 379,
     # "Entity and level handles" (#7387) landed together.
@@ -119,7 +120,6 @@ UNSTAMPED_HELPERS = frozenset(
     {
         "sneaking",
         "block_name_in_tag",
-        "may_build",
         "component",
         "living_equipment",
         "living_set_equipment",
