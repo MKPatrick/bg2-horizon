@@ -387,3 +387,42 @@ Three things cost time and are worth remembering:
   by `native-build` answers "Up to date (no build needed)". Every change has to
   be packed and copied into the instance again; `tools/dev_install.py` does the
   three steps (pack, install both halves, turn the mod on).
+
+### Round 7 (2026-11-11): the modes, ported and played
+
+All eight building and exchanging modes are in, and all eight were run in a
+world. `tools/ingame_check.py` is the harness now: it opens its own world,
+gives the gadgets, picks a block at ten blocks' range and then clicks once per
+mode, counting what landed.
+
+Every count is worked out from the mode rather than read off a run, which is
+what makes it a test: the site is one stone block hit on its west face from
+ten blocks away at range 3, so a mode that covers the hit block places one
+fewer. build_to_me 9, vertical_wall 8, vertical_column 2, horizontal_wall 9,
+horizontal_row 2, stairs 2, grid 8, surface 1 — and all eight matched. Stairs
+with range 10 built (107,152) through (115,160), one along and one up per
+step.
+
+On the unit tests: 29 new ones, 76 in all, and they passed on the first run,
+which is the kind of thing worth distrusting. So I broke `invertOnFace` and
+the grid's spacing on purpose: exactly the two tests that cover them failed
+and nothing else did. They have teeth.
+
+`/bg2 info | mode | range | toggle` came out of necessity rather than the Java
+mod: the mode is chosen by a radial menu, the range by a key and the settings
+by a screen, all of which are M8, so without a command there is no way to put
+a gadget into a mode and the ten ports would sit unexercised. `command.rs`
+says so at the top; it is not a stand-in for the screens, and it stays useful
+for scripting afterwards.
+
+Two things the Exchanger needed that the Building Gadget did not: it replaces
+in place, so `is_pos_valid` skips the replaceable check for it and
+`isExchangingValid` decides instead (air, the mod's own render block, block
+entities under `affect_tiles`, and either fuzzy or a match with the block
+being looked at); and it hands the old blocks back, because `edit_blocks` is
+`fill … strict` and drops nothing.
+
+Left for later: the anchor, which `BaseMode.collect` takes instead of the mode
+when it is set; `has_block_entity`, which is a list of vanilla names in
+`host_world.rs` because `block_entity_nbt` wants a mutable host; and
+`removeUnConnected`'s order, sorted here against Java's arbitrary `HashSet`.

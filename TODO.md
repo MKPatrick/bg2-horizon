@@ -140,8 +140,12 @@ needs is in [docs/hook-map.md](docs/hook-map.md).
       two tests that cover them fail.
 - [x] `/bg2 info | mode | range | toggle`, so the modes can be reached before
       the screens exist (M8). Not in the Java mod — `command.rs` says why.
-- [ ] **In game:** each mode placing what it should. The unit tests pin the
-      geometry; the game has to confirm the settings reach it.
+- [x] **In game:** all eight modes place exactly the count their geometry
+      predicts, with `tools/ingame_check.py` (11/11). The counts are worked
+      out from each mode and written into the script, not read off a run:
+      build_to_me 9, vertical_wall 8, vertical_column 2, horizontal_wall 9,
+      horizontal_row 2, stairs 2, grid 8, surface 1. `/bg2 mode` and
+      `/bg2 range` reach the gadget and stick on the item.
 - [ ] `ModeSwitchPayload`, `RangeChangePayload` and `ToggleSettingPayload`
       proper, with the radial menu and the keys (M8). `/bg2` stands in.
 - [ ] The anchor (`GadgetNBT.getAnchorList`, the `anchor` key): `BaseMode.collect`
