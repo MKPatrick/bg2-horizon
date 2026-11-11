@@ -1,0 +1,30 @@
+# Building Gadgets 2: a native trait mod (docs/native-mods.md, "Trait mods").
+#
+# `api/` is an ordinary Rust crate implementing `horizon_client::mod_api::Hooks`,
+# which the launcher links into the game it builds. There are no `[[injection]]`
+# or `[[module]]` entries: every part of the Java mod maps to a named hook point,
+# so nothing of the game's source has to be rewritten. The reasoning, and the
+# hook for each part of the Java mod, are in ../../docs/hook-map.md.
+#
+# Build it with
+#   horizon-launcher native-build <this folder> --instance <instance> --trust-native-code
+# and check it first, without a native build, with
+#   python tools/check_bundle.py
+#   python tools/local_check.py --tests
+[mod]
+id = "buildinggadgets2"
+version = "0.1.0"
+
+# Unpinned on purpose: the mod hooks only Horizon's named hook points, so
+# `hooks` in horizon-native.json names the hook-point API it needs and the
+# launcher builds it on that version of Horizon or any later one. Pinning a
+# commit here would give that up for nothing.
+# [compatibility]
+# horizon_revision = "<40 hex digits>"
+
+[api]
+path = "api"
+
+# TODO (M1): the content mod, packed by `cargo horizon-mod build` from
+# ../../bg2-content into data/bg2-content.hmod, loaded by the mod at start so
+# one .hnmod holds the models and textures too.

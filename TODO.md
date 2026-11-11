@@ -3,22 +3,29 @@
 Grouped by the milestones in [PLAN.md](PLAN.md). The Horizon hook each item
 needs is in [docs/hook-map.md](docs/hook-map.md).
 
-## M0 — Before anything compiles
+## M0 — Before anything compiles — **done except the pin**
 
-- [ ] Pin a Horizon Nightly: put its commit in `horizon-native.json`
-      (`horizon`) and `mixins/bg2/horizon-mixin.toml`
-      (`[compatibility] horizon_revision`). Both say
-      `TODO-pin-a-nightly-commit`.
-- [ ] Pin a `horizon-mixins` commit (`mixins` in `horizon-native.json`).
-- [ ] Confirm `NATIVE_HOOKS_API` on that commit, and set `hooks` to the highest
-      API this port actually uses (415 is the snapshot's ceiling, not a
-      requirement).
-- [ ] Start the bundle from
-      [horizon-native-mod-template](https://github.com/horizon-rust/horizon-native-mod-template)
-      and check that an empty bundle with only `core.rs` applies and compiles,
-      before any hook is added.
-- [ ] Get Horizon building locally at all: Rust 1.90+, Python 3.10+, JDK 25,
-      and `horizon-prepare` run against an own copy of Java Edition 26.3.
+- [x] Rust toolchain (1.99.1; Horizon needs 1.90+) and Python 3.11.
+- [x] Decide pinning: the mod is a trait mod on named hook points, so it is
+      **unpinned** — `hooks` in `horizon-native.json` says which hook-point API
+      it needs and the launcher builds it on that version or later. The
+      `[compatibility] horizon_revision` block stays commented out.
+- [x] Set `hooks` to what the code actually uses: 65 (`component_types`).
+      `tools/check_bundle.py` computes it and fails when the two disagree.
+- [x] Start the bundle from the official template
+      (`cargo horizon-mod new --template native`).
+- [x] Confirm every hook the port needs exists: ran Horizon's own API generator
+      against the tree — 533 trait methods, all 29 present.
+- [x] Check that the mod compiles against Horizon: `tools/local_check.py`,
+      clean in 1m27s, and `--tests` runs the mod's own tests.
+- [x] Check the content mod with Horizon's own tool: `cargo horizon-mod build`
+      and `check` both pass.
+- [ ] **Needs the user:** the Horizon commit the mod is tested on, for
+      `horizon-native.json`'s `horizon` (only needed to publish to the
+      registry, not to build).
+- [ ] **Needs a machine with a JDK 25 and the launcher:** `horizon-prepare`
+      against an own copy of Java Edition 26.3, then the first real
+      `native-build` and a play test. Neither is installed here.
 
 ## M1 — It loads
 
@@ -32,23 +39,22 @@ needs is in [docs/hook-map.md](docs/hook-map.md).
 - [ ] Decide the render block's look: it is never seen in an inventory and is
       replaced within a tick, so a `barrier`-like template with no collision is
       enough.
-- [ ] Pack `bg2-content` with Horizon's own tool
-      (`cargo horizon-mod build`, then `cargo horizon-mod check`), put the
-      result in `mixins/bg2/data/bg2-content.hmod`, and load it from the bundle
-      at start.
-- [ ] `native_items` and `native_blocks` (API 145): declare the 7 plain items
-      and the 2 blocks in code so they exist even if the content mod's files
-      change. The template manager's item comes from its block
-      (`"item": true`), and `render_block` sets `"item": false`.
+- [x] The 7 items, the 2 blocks, the creative tab and the template manager's
+      menu declared, and the whole content mod passing
+      `cargo horizon-mod check`.
+- [ ] Pack `bg2-content` into `native/buildinggadgets2/data/bg2-content.hmod`
+      and load it from the mod at start, so one `.hnmod` holds everything.
+- [ ] Decide each gadget's real template: they are `minecraft:stick` with
+      `max_stack_size` 1 for now, which is enough to hold them but gives them a
+      stick's behaviour.
 - [ ] Check in game: the creative tab, the 8 items with the right models and
       names, the template manager placeable.
 
 ## M2 — One block placed
 
-- [ ] `native_component_types` (API 65): register every component in
-      `BG2DataComponents` — mode, range, the 7 toggles, the 6 numbers, the
-      anchor and its list, the copy/paste positions, the gadget and copy UUIDs,
-      the blockstate, the undo list, the template name.
+- [x] `component_types` (API 65): all 28 of `BG2DataComponents`' components
+      registered in `api/src/ids.rs`, with tests that they are unique,
+      namespaced and complete.
 - [ ] Port `VectorHelper` / `VecHelper`: the ray cast from the player's eye,
       with and without fluids (`raytrace_fluid`).
 - [ ] Port `UseContext` and `BuildingUtils`' placement check: can this position
@@ -96,8 +102,8 @@ needs is in [docs/hook-map.md](docs/hook-map.md).
 - [ ] Rebuild only when the target, the mode, the range or the settings change;
       keep the buffer's capacity between frames.
 - [ ] The lines and boxes: the build's bounds, the anchor, the copy region, the
-      destruction box — as quads in the same pass, since `world_primitives` is
-      not reachable from a mixin bundle.
+      destruction box — through `world_primitives`, which a trait mod reaches,
+      so they need no pass of our own.
 - [ ] The squished variant (`DireVertexConsumerSquished`) for the exchanger's
       overlay.
 - [ ] Check: the preview and the placement agree, exactly, in every mode.
@@ -176,8 +182,8 @@ needs is in [docs/hook-map.md](docs/hook-map.md).
 - [ ] `native_item_decorations` and `native_item_bar` if a gadget shows a bar.
 - [ ] Energy: the Java mod has a `forge_energy` component. Decide whether the
       port has an energy cost at all, and if so use `item_energy_buffer`.
-- [ ] AE2 integration behind an `optional` macro, once the AE2 port is a build
-      people run.
+- [ ] AE2 integration as an optional trait-mod dependency on the AE2 port, once
+      that port is a build people run.
 - [ ] JEI: the recipe-viewer hooks, against `horizon-jei`.
 - [ ] The guide book: draw it, or drop it and say so in the README.
 
@@ -195,4 +201,6 @@ needs is in [docs/hook-map.md](docs/hook-map.md).
 - [ ] Write down every difference from the Java mod in the README.
 - [ ] Credits and licences checked: the Java mod's MIT notice, the textures'
       terms, Horizon's.
-- [ ] Pin and test one Horizon commit, and say which in the README.
+- [ ] Test on one Horizon commit, put it in `horizon-native.json`'s `horizon`,
+      and say which in the README.
+- [ ] `tools/check_bundle.py` and `tools/local_check.py --tests` clean.

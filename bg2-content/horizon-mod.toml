@@ -1,11 +1,11 @@
 # Building Gadgets 2's blocks, items, textures and models, carried over from the
 # Java mod (MIT, Direwolf20-MC) by tools/make_content_mod.py.
 #
-# The native mod (mixins/bg2) loads this as a packed `.hmod` at start, as AE2's
+# The native mod (native/buildinggadgets2) loads this as a packed `.hmod` at start, as AE2's
 # port does, so one `.hnmod` holds everything and nothing is installed separately.
 id = "buildinggadgets2"
 name = "Building Gadgets 2 (blocks and items)"
-version = "0.1.0-dev"
+version = "0.1.0"
 description = "The gadgets, the template manager and the render block: models, textures and recipes."
 authors = ["direwolf20"]
 api = "0.2"

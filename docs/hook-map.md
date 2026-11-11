@@ -1,43 +1,89 @@
 # Building Gadgets 2 → Horizon: what each part of the Java mod lands on
 
-Checked against Horizon's `native-hooks.json` (434 hooks, 177 helpers,
-`NATIVE_HOOKS_API` **415**) and `docs/native-mods.md` in the snapshot this port
-started from. The Java side is Building Gadgets 2 for Minecraft 26.1.2 /
-NeoForge 26.1.2.122: 144 files, about 14 000 lines.
+Checked against Horizon's own source in the snapshot this port started from
+(`native-hooks.json`: 434 hooks, 177 helpers, `NATIVE_HOOKS_API` **415**), not
+only against its docs. Where a claim below came from running something, it says
+so. The Java side is Building Gadgets 2 for Minecraft 26.1.2 / NeoForge
+26.1.2.122: 144 files, about 14 000 lines.
 
-`API n` is the `"hooks": n` a bundle must declare to use that hook. The highest
-one this port needs decides `horizon-native.json`'s `hooks`.
+`API n` is the `"hooks": n` the mod must declare to use that hook. The highest
+one it actually uses is what `horizon-native.json` carries, and
+`tools/check_bundle.py` computes it from the code.
+
+## The mod is a trait mod, not a mixin bundle
+
+Horizon takes native mods two ways, and this matters for everything below.
+
+- A **mixin bundle** (`[[injection]]`, `[[module]]`) rewrites the game's source
+  before it is compiled. AE2's port is one, because it needed surgery in the
+  mesher, in block entity drawing and in villager trade tables.
+- A **trait mod** (`[api]`) is an ordinary Rust crate that implements
+  `horizon_client::mod_api::Hooks` and is linked into the game the launcher
+  builds. `cargo horizon-mod new --template native` writes one, so it is the
+  route Horizon points a new mod at.
+
+Building Gadgets 2 is a trait mod. Every line of the mapping below is a named
+hook point, so nothing needs the source rewritten, and the trait route gives:
+
+- **No pin.** A mixin bundle must name the Horizon commit it was built against,
+  because the file it patches can move (`E_MODULE`, `E_TARGET_NOT_FOUND`). A
+  trait mod declares `"hooks": N` and the launcher builds it on any Horizon
+  whose `NATIVE_HOOKS_API` is N or later — hook points are only ever added.
+  Horizon's own native mods (Zoom, the FPS counter, the minimap) are made this
+  way so they need no re-release per Nightly.
+- **It can be switched off** in Options → Mods without a rebuild. Mixin code
+  cannot.
+- **It compiles locally.** `tools/local_check.py` points the crate's
+  `horizon-client` dependency at a local Horizon tree, the way the launcher
+  does, and `cargo check` runs in about 90 seconds once the dependencies are
+  built. The mod's own `cargo test` runs too, which is what the mode geometry in
+  M3 is checked with.
+
+The generated trait has **533 methods** — one per catalog hook. Every one of
+the 29 hooks this port needs is among them, confirmed by running Horizon's own
+generator (`horizon_mod_api_gen::generate_test_hooks`) against this tree.
+
+### What a trait mod cannot reach
+
+`horizon_mods::content::{Item, Block}` — the types `items` and `blocks` take —
+are not re-exported through `horizon_client::mod_api`, and the `[api]` crate may
+only depend on `horizon-client`. So **declaring blocks and items in code is not
+available to a trait mod**; they come from the content mod's files instead
+(`bg2-content/data/buildinggadgets2/horizon/`), which is where this port puts
+them anyway. Nothing is lost: the files are the declaration either way, and a
+content mod's ids are what a save and a joining client check against.
 
 ## Registration and per-stack data
 
 | Java | Horizon | API |
 |---|---|---|
-| `DeferredRegister` ITEMS, 7 plain items | `native_items`, plus `bg2-content`'s `horizon/item/*.json` | 145 |
-| `DeferredRegister` BLOCKS, `render_block` + `template_manager` | `native_blocks`, plus `horizon/block/*.json` | 145 |
-| `BlockItem` for the template manager | the block's own declaration: `"item": true` (the default). A block's item is **not** a separate `horizon/item/` file — `render_block` sets `"item": false` instead | 145 |
-| `BG2DataComponents`: 15 fixed components, 7 toggles, 6 numbers | `native_component_types`, then `native_component` / `native_set_component` / `native_remove_component` | 65 |
-| `BlockEntityType` `RenderBlockBE`, `TemplateManagerBE` | `native_block_entity`, `native_block_entity_ticks`, `native_block_entity_tick` | 15 |
-| `TemplateManagerContainer` (`MenuType`) | `native_block_entity_container` + `horizon/menu/template_manager.json` | 16, 17 |
+| `DeferredRegister` ITEMS, 7 plain items | `bg2-content`'s `horizon/item/*.json` | — |
+| `DeferredRegister` BLOCKS, `render_block` + `template_manager` | `horizon/block/*.json` | — |
+| `BlockItem` for the template manager | the block's own `"item": true` (the default a file sets). A block's item is **not** a separate `horizon/item/` file; `render_block` sets `"item": false` so it has none | — |
+| `Item.Properties.stacksTo(1)` | the item file's `"max_stack_size": 1`. **Not** a `minecraft:max_stack_size` component: Horizon refuses that with *"component … : set max_stack_size instead"* (`content.rs`'s `check_components`), which `cargo horizon-mod build` reports | — |
+| `BG2DataComponents`: 12 fixed, 7 toggles, 6 numbers, 3 more | `component_types`, then `component` / `set_component` / `remove_component`. Implemented, with tests, in `api/src/ids.rs` | 65 |
+| `BlockEntityType` `RenderBlockBE`, `TemplateManagerBE` | `block_entity`, `block_entity_ticks`, `block_entity_tick` | 15 |
+| `TemplateManagerContainer` (`MenuType`) | `block_entity_container` + `horizon/menu/template_manager.json` | 16, 17 |
 | `SoundEvent` `beep` | the content mod's `assets/buildinggadgets2/sounds` | — |
 | Creative tab | `horizon/creative_tab/buildinggadgets2.json` | — |
 
 A gadget's state is per stack, so it stays in components, as in Java. The
-world-level stores (below) become attachments.
+world-level stores are attachments, below.
 
 ## Using a gadget
 
 | Java | Horizon | API |
 |---|---|---|
-| `BaseGadget.useOn` / `use` (right click) | `native_use_item_on`, then `native_use_item` | 13 |
-| left click with a gadget (undo, anti-build) | `native_left_click_block` | — |
-| `GadgetDestruction` breaking blocks | `native_destroy_block` (cancellable) | 14 |
-| `BuildingUtils` placing many blocks | `native_edit_blocks` (one packed write per section, as `fill … strict`), block entity NBT through `NativeBlockEdit.block_entities` | 126 |
-| a single placement that must tell its neighbours | `native_set_block` | — |
-| taking and giving the player's materials | `native_count_items`, `native_take_items`, `native_give_items` | 9 |
-| protection checks (claims, spawn) | `native_may_build` → every mod's `native_can_build` | pending¹ |
-| `Item.appendHoverText` | `native_tooltip` | 12 |
-| `BuildingGadgets2Commands`, `RedprintCommand` | `native_register_commands`, `native_perform_command` | 8 |
-| build and destroy particles | `native_send_particles`, `ParticleOptions::named` for the mod's own | 11, 103 |
+| `BaseGadget.useOn` / `use` (right click) | `use_item_on`, then `use_item` | 13 |
+| left click with a gadget (undo, anti-build) | `left_click_block` | 13 |
+| `GadgetDestruction` breaking blocks | `destroy_block` (cancellable) | 14 |
+| `BuildingUtils` placing many blocks | `edit_blocks` (one packed write per section, as `fill … strict`), block entity NBT through `NativeBlockEdit.block_entities` | 126 |
+| a single placement that must tell its neighbours | `set_block` | — |
+| taking and giving the player's materials | `count_items`, `take_items`, `give_items` | 9 |
+| protection checks (claims, spawn) | `may_build` → every mod's `can_build` | pending¹ |
+| `Item.appendHoverText` | `tooltip` | 12 |
+| `BuildingGadgets2Commands`, `RedprintCommand` | `register_commands`, `perform_command` | 8 |
+| build and destroy particles | `send_particles`, `ParticleOptions::named` for the mod's own | 11, 103 |
 
 ¹ `can_build` / `may_build` carry an unstamped `@API:can_build@` placeholder in
 this snapshot. Confirm the number before relying on them; until then place
@@ -47,8 +93,8 @@ without the check, as the Java mod does.
 
 `BG2Data extends SavedData` holds the undo lists, the copy/paste snapshots, the
 block entity data of a cut, and the redprint name → UUID map. Horizon's
-equivalent is a server attachment with a codec on `Holder::Level`, saved into the
-dimension's `horizon_attachments.dat`:
+equivalent is a server attachment with a codec on `Holder::Level`, saved into
+the dimension's `horizon_attachments.dat`:
 
 ```rust
 static BG2_DATA: AttachmentType<Bg2Data> = AttachmentType {
@@ -59,6 +105,8 @@ static BG2_DATA: AttachmentType<Bg2Data> = AttachmentType {
 };
 ```
 
+`AttachmentType`, `AttachmentCodec` and `Holder` are re-exported through
+`horizon_client::mod_api`, so a trait mod reaches them.
 `Holder::Player(uuid)` carries what the Java mod hangs off a player, and
 `Holder::BlockEntity([x, y, z])` what a `RenderBlockBE` keeps.
 
@@ -72,10 +120,9 @@ go over Horizon's single mod-net channel, one channel name each:
 | `ModeSwitchPayload`, `RangeChangePayload`, `ToggleSettingPayload`, `RenderChangePayload`, `AnchorPayload`, `RotatePayload`, `RelativePastePayload`, `CopyCoordsPayload`, `CutPayload`, `UndoPayload`, `SendPastePayload`, `SendCopyDataToServerPayload`, `RequestCopyDataPayload`, `DestructionRangesPayload`, `UpdateTemplateManagerPayload` | client → server |
 | `SendCopyDataPayload` | server → client |
 
-- `native_net_send_to_server(channel, data)` and
-  `native_net_send_to_player(player, channel, data)` send;
-  `native_net_from_client(player, channel, data)` and
-  `native_net_from_server(channel, data)` hear. API **40**.
+- `net_send_to_server(channel, data)` and
+  `net_send_to_player(player, channel, data)` send; `net_from_client(player,
+  channel, data)` and `net_from_server(channel, data)` hear. API **40**.
 - Channels are `buildinggadgets2:<name>`.
 - At most 30 000 bytes a message and 32 messages a tick each way per player, so
   a large copy must be split and reassembled — something the Java mod never has
@@ -88,13 +135,13 @@ go over Horizon's single mod-net channel, one channel name each:
 
 | Java | Horizon | API |
 |---|---|---|
-| `TemplateManagerGUI` (a block's menu) | `native_screen`, `native_screen_draw`, `native_screen_click`, `native_screen_tooltip`, `native_menu_button` | 19, 20 |
-| `ModeRadialMenu`, `CopyGUI`, `PasteGUI`, `DestructionGUI`, `MaterialListGUI` (no block behind them) | `native_mod_screen_open(mod_id)`, drawn in `native_screen_render_post`, input from the `native_screen_*_pre` hooks | 111 |
-| `GuiTemplatePreview` | `native_draw_scene(batch, rect, blocks, view)` | — |
-| the widgets in `client/screen/widgets` | drawn by hand with `native_fill`, `native_quad`, `native_sprite`, `native_text`, `native_item_stack` | 313 |
-| `KeyBindings`: `settings_menu` G, `undo` U, `anchor` H, `range` R | `native_set_mod_key` / `native_mod_key`, presses through `native_key` / `native_input_key` | — |
+| `TemplateManagerGUI` (a block's menu) | `screen`, `screen_draw`, `screen_click`, `screen_tooltip`, `menu_button` | 19, 20 |
+| `ModeRadialMenu`, `CopyGUI`, `PasteGUI`, `DestructionGUI`, `MaterialListGUI` (no block behind them) | `mod_screen_open(mod_id)`, drawn in `screen_render_post`, input from the `screen_*_pre` hooks | 111 |
+| `GuiTemplatePreview` | `draw_scene(batch, rect, blocks, view)` | — |
+| the widgets in `client/screen/widgets` | drawn by hand with `fill`, `quad`, `sprite`, `text`, `item_stack` | 313 |
+| `KeyBindings`: `settings_menu` G, `undo` U, `anchor` H, `range` R | `set_mod_key` / `mod_key`, presses through `key` / `input_key` | 111 |
 
-## The hard part: the ghost preview
+## The ghost preview
 
 The Java mod draws its preview with its own buffer builders and a VBO
 (`VBORenderer`, `DireBufferBuilder`, `DireVertexConsumer`,
@@ -102,44 +149,52 @@ The Java mod draws its preview with its own buffer builders and a VBO
 `FakeRenderingWorld`): translucent block models at the positions a build would
 fill, re-baked when the target moves.
 
-Horizon has no `RenderType`, no `PoseStack` and no `BufferBuilder`. The preview
-becomes the mod's own wgpu pass, run from the renderer's own hook point:
+Horizon has no `RenderType`, no `PoseStack` and no `BufferBuilder`. It splits
+into two halves, and only the second is real work.
 
-- `native_world_drawn(world)` (API **58**) runs on the render thread once the
-  world is drawn, with the frame's device, queue, encoder, colour target, the
-  world's reversed depth and the camera's matrices.
-- `native_render_needs(needs)` asks for `world_depth` to be kept, so the pass
-  reads the world's depth rather than binding it — the world may draw at a lower
+**The lines and boxes come free.** `world_primitives(host, event)` is a trait
+method — `line`, `box_outline`, `filled_box`, `beam` and `text`, in world
+coordinates with ARGB colours, each with `.through_walls()`, drawn by Horizon
+after the entities. That covers the build's bounding box, the anchor marker, the
+copy region and the destruction box with no pipeline of our own. (An earlier
+draft of this document had it as unreachable, on the grounds that it is a
+trait-mod API and not in `native-hooks.json`. That was right about the API and
+wrong about the consequence: this mod *is* a trait mod.)
+
+**The textured ghost blocks are the custom part.** `RenderHooks::world_drawn`
+(API **58**, reached through `Hooks::render`) runs on the render thread once the
+world is drawn, with the frame's device, queue, encoder, colour target, the
+world's reversed depth and the camera's matrices. With it:
+
+- `render_needs` asks for `world_depth` to be kept, so the pass reads the
+  world's depth rather than binding it — the world may draw at a lower
   resolution than the frame, and a pass's attachments must agree in size.
-- `native_block_sprites` hands over the block sprite arrays, so a ghost quad can
-  carry a real block texture.
-- `native_world_primitives` would draw the lines and boxes (a build's bounding
-  box, the anchor, a copy region), but in this snapshot it is a **trait mod**
-  API and not in `native-hooks.json`. From a mixin bundle, draw those as quads
-  in the same pass instead.
+- `block_sprites` hands over the block sprite arrays, so a ghost quad carries
+  the real block's texture.
 
 **AE2's port already built this pass**: `mixins/ae2/ae2_draw.rs`, 306 lines — a
-translucent quad pass run from `native_world_drawn`, with a per-quad block
-sprite, an ARGB colour and a `behind` factor for what shows through the world,
-written for (among other things) its own placement preview. Read it before
-writing ours. The shape of the problem is the same; only the number of quads is
-larger.
+translucent quad pass run from `world_drawn`, with a per-quad block sprite, an
+ARGB colour and a `behind` factor for what shows through the world, written for
+(among other things) its own placement preview. Read it before writing ours. The
+shape of the problem is the same; only the number of quads is larger. It lives
+in a module in the renderer's crate because AE2 is a mixin bundle; as a trait
+mod the same code goes in the `[api]` crate behind `Hooks::render`.
 
 ## Integrations
 
 | Java | Horizon |
 |---|---|
-| `AE2Integration` (pull materials from an ME network) | the AE2 Horizon port's own hooks, compiled in only when that mod is in the build (AE2's `mixins/ae2/optional` macro) |
+| `AE2Integration` (pull materials from an ME network) | trait mods can depend on each other by `[mod] version` with Cargo semver (`base_mod = "^1"`, optional ones behind a feature named after the mod id), so this becomes an optional dependency on the AE2 port — cleaner than AE2's own `optional` macro |
 | `CuriosIntegration` (a gadget in a Curios slot) | no Curios on Horizon: dropped, unless a port appears |
 | JEI | `horizon-jei` exists (Joeypc6/horizon-jei); the recipe-viewer hooks are API 2 plus the pending `panel_style` |
-| the Patchouli book in `patchouli_books/` | no Patchouli on Horizon. AE2 drew its own guide over any screen (`kit_guide*.rs`); the same is possible here, or the book is dropped |
+| the Patchouli book in `patchouli_books/` | no Patchouli on Horizon. AE2 drew its own guide over any screen; the same is possible here, or the book is dropped |
 
 ## What will not carry over
 
 - **Java addons.** `GadgetModes.registerMode` is Building Gadgets 2's public API
-  for other mods. Nothing Java runs on Horizon, so it becomes a Rust-side list
-  that another native mod could only extend by being compiled into the same
-  build.
+  for other mods. Nothing Java runs on Horizon. Another *native* mod could add
+  modes through the trait-mod dependency mechanism above, which is the nearest
+  equivalent.
 - **`FakeRenderingWorld`.** It exists to feed vanilla's block renderer a
   pretend world. The preview pass builds its quads directly, so there is nothing
   left to fake.

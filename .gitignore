@@ -1,9 +1,11 @@
-# Packed content mod: built from bg2-content by tools/make_content_mod.py.
-mixins/bg2/data/*.hmod
+# The content mod packed by `cargo horizon-mod build`, and the copy the
+# bundle ships. Both are built, not written by hand.
+bg2-content/target/
+native/*/data/*.hmod
 
-# Horizon's own build output, when a build runs inside this folder.
-/target/
-/native/
+# The trait mod's local build output (`tools/local_check.py`).
+native/*/api/target/
+native/*/api/Cargo.lock
 
 # Editors and OSes
 .idea/

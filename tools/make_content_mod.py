@@ -6,7 +6,7 @@ what the tool has to do and exits. See TODO.md, "M1 - It loads".
 Horizon runs no Java, so a block here is a vanilla block's behaviour (its
 `template`) under Building Gadgets 2's id, carrying the Java mod's models,
 textures, names, recipes and tags. Nearly all of the mod's behaviour is in the
-native bundle (`mixins/bg2`), so the content side is small: 8 items, 2 blocks.
+trait mod (`native/buildinggadgets2`), so the content side is small: 8 items, 2 blocks.
 
 Source: Building Gadgets 2's jar, or its `src/main/resources` plus
 `src/generated/resources` (240 asset files, 37 generated resources).
@@ -36,7 +36,7 @@ The `.hmod` itself is packed by Horizon's own tool, not here:
     cargo horizon-mod build        # -> target/horizon-mod/buildinggadgets2.hmod
     cargo horizon-mod check target/horizon-mod/buildinggadgets2.hmod
 
-The packed file then goes to `mixins/bg2/data/bg2-content.hmod`, which the
+The packed file then goes to `native/buildinggadgets2/data/bg2-content.hmod`, which the
 native bundle loads at start, so one `.hnmod` holds everything.
 
 Usage, once written: python make_content_mod.py <jar-or-resources-dir> <out dir>

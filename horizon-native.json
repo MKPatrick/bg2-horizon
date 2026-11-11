@@ -1,9 +1,9 @@
 {
   "game": "26.3",
-  "hooks": 415,
-  "horizon": "TODO-pin-a-nightly-commit",
+  "hooks": 65,
+  "horizon": "TODO-pin-the-commit-this-was-tested-on",
   "id": "buildinggadgets2",
-  "mixins": "TODO-pin-a-horizon-mixins-commit",
+  "mixins": "TODO-unused-by-a-trait-mod-see-docs-hook-map",
   "schema": 1,
-  "version": "0.1.0-dev"
+  "version": "0.1.0"
 }

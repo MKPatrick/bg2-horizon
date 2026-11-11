@@ -5,9 +5,11 @@ An unofficial, in-progress port of
 direwolf20) to [Horizon](https://github.com/horizon-rust/horizon), as a **native
 mod**: Rust compiled into the game, with no Java.
 
-> **Status: scaffolding.** Nothing is playable yet. The repository holds the
-> plan, the Java → Horizon hook mapping, and the manifests the build needs.
-> [PLAN.md](PLAN.md) has the milestones and [TODO.md](TODO.md) the work list.
+> **Status: M0 done, M1 next.** Nothing is playable yet. What exists: the
+> Java → Horizon hook mapping, a trait mod that compiles against Horizon and
+> registers the gadgets' data components, and a content mod that passes
+> Horizon's own registry check. [PLAN.md](PLAN.md) has the milestones and
+> [TODO.md](TODO.md) the work list.
 
 ## Why a rewrite and not a jar
 
@@ -18,9 +20,12 @@ of two things, and Building Gadgets 2 needs both:
 
 - a **content mod** (`.hmod`) — blocks, items, recipes, models, textures, with
   no code;
-- a **native mod** (`.hnmod`) — a [horizon-mixins](https://github.com/horizon-rust/horizon-mixins)
-  bundle: Rust that hooks named points in the game's own source before it is
-  compiled. The launcher compiles the game for the player.
+- a **native mod** (`.hnmod`) — Rust that hooks named points in the game. This
+  port is a **trait mod**: an ordinary Rust crate implementing
+  `horizon_client::mod_api::Hooks`, which the launcher links into the game it
+  builds for the player. It is not a [horizon-mixins](https://github.com/horizon-rust/horizon-mixins)
+  bundle, because nothing here needs the game's source rewritten — see
+  [docs/hook-map.md](docs/hook-map.md) for why that matters.
 
 Nearly all of Building Gadgets 2 is behaviour — ray casts, modes, placement,
 undo, the ghost preview, five screens — so the port is a rewrite of its logic in
@@ -28,17 +33,17 @@ Rust against Horizon's hooks. No original code runs.
 
 ## Layout
 
-Following the [AE2 Horizon port](https://github.com/), which took the same road
-from a Java mod to a native one:
-
 | Path | What it is |
 |---|---|
-| `mixins/bg2/` | the native mod: `horizon-mixin.toml` and the Rust that hooks the game |
-| `mixins/bg2/data/bg2-content.hmod` | `bg2-content` packed as a plain zip, loaded by the native mod at start, so one `.hnmod` holds everything |
-| `bg2-content/` | the source of that file: the gadgets' and blocks' declarations, models, textures and recipes |
-| `horizon-native.json` | the registry manifest: the game version, the hooks API and the Horizon commit this is built for |
+| `native/buildinggadgets2/` | the native mod: `horizon-mixin.toml` and the `api/` crate that implements `Hooks` |
+| `native/buildinggadgets2/api/src/ids.rs` | the mod's ids and its data components, with tests |
+| `native/buildinggadgets2/data/bg2-content.hmod` | `bg2-content` packed, loaded by the mod at start, so one `.hnmod` holds everything (built, not committed) |
+| `bg2-content/` | the gadgets' and blocks' declarations, models, textures and recipes |
+| `horizon-native.json` | the registry manifest: the game version, the hooks API and the commit the mod was tested on |
 | `docs/hook-map.md` | every part of the Java mod and the Horizon hook it lands on |
-| `tools/make_content_mod.py` | regenerates `bg2-content` from the Java mod's jar |
+| `tools/check_bundle.py` | checks the bundle and the manifest against a Horizon tree before a build |
+| `tools/local_check.py` | `cargo check`/`cargo test` the mod against a local Horizon tree |
+| `tools/make_content_mod.py` | regenerates `bg2-content` from the Java mod's jar (not written yet) |
 | `PLAN.md`, `TODO.md` | the milestones, and the work list under them |
 
 ## What is being ported
@@ -61,20 +66,36 @@ The whole mod, as the Java version has it:
 
 ## Building
 
-This is a Horizon native mod bundle. Native mods are **unsandboxed code that
-runs with your rights** — read what you build.
+Native mods are **unsandboxed code that runs with your rights** — read what you
+build.
 
-A bundle builds against one exact Horizon commit, named in
-`horizon-native.json` and in `mixins/bg2/horizon-mixin.toml`. Both say
-`TODO-pin-a-nightly-commit` until the first milestone is reached.
-
-Put each bundle's `mixins/<id>` folder in one folder, then:
+The mod is unpinned: it declares the hook-point API it needs (`hooks` in
+`horizon-native.json`) and the launcher builds it on any Horizon at that version
+or later, so it does not need a new release for every Nightly.
 
 ```bash
-horizon-launcher native-build "path/to/that/folder" --trust-native-code
+horizon-launcher native-build native/buildinggadgets2 --instance <instance> --trust-native-code
 ```
 
-The launcher compiles the game with the mods you have installed.
+### Checking it without a native build
+
+A native build takes a while, so both halves can be checked first. Needs Rust
+1.90+ and a Horizon source tree (`../horizon-main` by default):
+
+```bash
+python tools/check_bundle.py
+```
+
+```bash
+python tools/local_check.py --tests
+```
+
+The content mod is built and checked with Horizon's own tool, from
+`bg2-content`:
+
+```bash
+cargo horizon-mod build && cargo horizon-mod check target/horizon-mod/buildinggadgets2.hmod
+```
 
 ## Differences from the Java mod
 
@@ -85,7 +106,8 @@ Written down as they are found. The ones already known from the plan:
 - **No Patchouli book.** Patchouli does not exist on Horizon. The in-game guide
   is either drawn by the mod itself or dropped.
 - **No Java addon API.** `GadgetModes.registerMode` let other Java mods add
-  modes. Nothing Java runs here.
+  modes. Nothing Java runs here; another native mod could add modes through
+  Horizon's trait-mod dependencies instead.
 - **Minecraft 26.3, not 26.1.2.** The Java mod targets 26.1.2; Horizon is 26.3.
 - **Large copies are split across several network messages.** Horizon's mod-net
   channel takes 30 000 bytes a message, which a big template exceeds.
