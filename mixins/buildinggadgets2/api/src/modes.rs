@@ -7,418 +7,612 @@
 //! the Java source case by case.
 //!
 //! The Java side is `util/modes/*.java`. A mode's `collectWorld` returns
-//! positions **relative to the hit block**, not absolute ones
-//! (`BlockPos.ZERO.relative(hitSide, i)`), while it checks validity on the
-//! absolute position (`start.relative(hitSide, i)`). `BuildingUtils.build`
-//! then offsets each by the hit position again. This port keeps that split:
-//! [`collect`] answers relative offsets.
+//! positions **relative to the hit block**, not absolute ones, while it checks
+//! validity on the absolute position. `BuildingUtils.build` then offsets each
+//! by the hit position again. This port keeps that split: [`collect`] answers
+//! relative offsets.
 //!
-//! Milestone 2 has Build to Me only; the other ten follow in M3.
+//! The same class serves the Building Gadget and the Exchanger in Java, with
+//! an `isExchanging` flag from its constructor, and several modes branch on
+//! it. Here that is [`Ctx::exchanging`].
 
-use crate::world::{Blocks, Face};
+use crate::world::{Axis, Blocks, Face};
+use std::collections::{HashSet, VecDeque};
 
 /// The settings a mode reads off the gadget (`GadgetNBT`).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Settings {
-    /// `PLACE_ON_TOP`: Build to Me measures to the player's eye instead of
-    /// their feet.
+    /// `PLACE_ON_TOP`.
     pub place_on_top: bool,
     /// `RAYTRACE_FLUID`, used by the raycast rather than by a mode.
     pub raytrace_fluid: bool,
-    /// `gadget_range`, the tool range the area modes use (M3).
+    /// `FUZZY`: the exchanger takes any block, and Surface any solid one.
+    pub fuzzy: bool,
+    /// `CONNECTED_AREA`: the exchanger keeps only what touches the start.
+    pub connected_area: bool,
+    /// `AFFECT_TILES`: the exchanger may replace blocks with a block entity.
+    pub affect_tiles: bool,
+    /// `gadget_range`, the tool range (`GadgetNBT.getToolRange`), 1 by default.
     pub range: i32,
 }
 
 /// Where the player is, as a mode reads them.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PlayerAt {
-    /// `player.blockPosition()`, the block the player stands in.
+    /// `player.blockPosition()`.
     pub block: [i32; 3],
-    /// `player.getEyeY()`, the exact height of their eyes.
+    /// `player.getEyeY()`.
     pub eye_y: f64,
+    /// `player.getY()`, the exact feet height, which Stairs compares against.
+    pub y: f64,
+    /// `player.getDirection()`, the horizontal direction they face.
+    pub facing: Face,
 }
 
-/// The modes a gadget can be in. Only `BuildToMe` is ported so far.
+/// The modes a gadget can be in, by their `BaseMode.getId()` path.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mode {
     BuildToMe,
+    VerticalWall,
+    VerticalColumn,
+    Surface,
+    HorizontalWall,
+    Stairs,
+    HorizontalRow,
+    Grid,
+    Copy,
+    Cut,
+    Paste,
 }
 
 impl Mode {
-    /// The mode's id, as `BaseMode.getId()` gives it.
-    pub fn id(self) -> &'static str {
+    /// The mode's id path, as `getId()` gives it.
+    pub fn path(self) -> &'static str {
         match self {
-            Mode::BuildToMe => "buildinggadgets2:build_to_me",
+            Mode::BuildToMe => "build_to_me",
+            Mode::VerticalWall => "vertical_wall",
+            Mode::VerticalColumn => "vertical_column",
+            Mode::Surface => "surface",
+            Mode::HorizontalWall => "horizontal_wall",
+            Mode::Stairs => "stairs",
+            Mode::HorizontalRow => "horizontal_row",
+            Mode::Grid => "grid",
+            Mode::Copy => "copy",
+            Mode::Cut => "cut",
+            Mode::Paste => "paste",
         }
     }
 
-    /// The mode of an id, or `None` for one this port does not have yet.
+    /// The namespaced id.
+    pub fn id(self) -> String {
+        format!("buildinggadgets2:{}", self.path())
+    }
+
+    /// The mode of an id, with or without the namespace.
     pub fn from_id(id: &str) -> Option<Mode> {
-        match id {
-            "buildinggadgets2:build_to_me" | "build_to_me" => Some(Mode::BuildToMe),
-            _ => None,
-        }
+        let path = id.strip_prefix("buildinggadgets2:").unwrap_or(id);
+        Mode::ALL.into_iter().find(|m| m.path() == path)
     }
 
     /// The translation key, as `BaseMode.i18n()`.
     pub fn i18n(self) -> String {
-        let path = self.id().split_once(':').map_or(self.id(), |(_, p)| p);
-        format!("buildinggadgets2.modes.{path}")
+        format!("buildinggadgets2.modes.{}", self.path())
+    }
+
+    /// Every mode, in the order `GadgetModes` lists them per gadget.
+    pub const ALL: [Mode; 11] = [
+        Mode::BuildToMe,
+        Mode::VerticalWall,
+        Mode::VerticalColumn,
+        Mode::Surface,
+        Mode::HorizontalWall,
+        Mode::Stairs,
+        Mode::HorizontalRow,
+        Mode::Grid,
+        Mode::Copy,
+        Mode::Cut,
+        Mode::Paste,
+    ];
+
+    /// The Building Gadget's modes, in `GadgetModes`' order.
+    pub const BUILDING: [Mode; 8] = [
+        Mode::BuildToMe,
+        Mode::VerticalWall,
+        Mode::VerticalColumn,
+        Mode::Surface,
+        Mode::HorizontalWall,
+        Mode::Stairs,
+        Mode::HorizontalRow,
+        Mode::Grid,
+    ];
+
+    /// The Exchanger's modes.
+    pub const EXCHANGING: [Mode; 4] = [
+        Mode::Surface,
+        Mode::VerticalColumn,
+        Mode::HorizontalRow,
+        Mode::Grid,
+    ];
+}
+
+/// Everything a mode needs besides the world: the click and the gadget.
+pub struct Ctx<'a> {
+    pub blocks: &'a dyn Blocks,
+    /// The Exchanger rather than the Building Gadget (`BaseMode.isExchanging`).
+    pub exchanging: bool,
+    pub settings: Settings,
+    pub player: PlayerAt,
+    pub hit_side: Face,
+    /// The block that was hit, which every offset is relative to.
+    pub start: [i32; 3],
+    /// The state the gadget places (`GadgetNBT.getGadgetBlockState`).
+    pub state: &'a str,
+}
+
+impl Ctx<'_> {
+    /// `BaseMode.isPosValid`, on an absolute position.
+    ///
+    /// The Java checks, in order:
+    ///
+    /// 1. `isExchangingValid` (below), for the Exchanger only;
+    /// 2. `y >= level.getMaxY() || y < level.getMinY()`;
+    /// 3. `blockState.canSurvive(level, pos)` — **not ported**: Horizon has no
+    ///    helper that asks a state whether it can stay at a position, so a
+    ///    build of blocks that need support is not filtered and those blocks
+    ///    drop when placed. Nothing a full block does is affected;
+    /// 4. `level.mayInteract(player, pos)`;
+    /// 5. for the Building Gadget only, the block there `canBeReplaced()`.
+    pub fn is_pos_valid(&self, pos: [i32; 3]) -> bool {
+        if !self.is_exchanging_valid(pos) {
+            return false;
+        }
+        let (min_y, height) = self.blocks.height();
+        if pos[1] >= min_y + height || pos[1] < min_y {
+            return false;
+        }
+        if !self.blocks.may_place(pos) {
+            return false;
+        }
+        if !self.exchanging && !self.blocks.is_replaceable(pos) {
+            return false;
+        }
+        true
+    }
+
+    /// `BaseMode.isExchangingValid`: what the Exchanger may replace.
+    ///
+    /// True for everything when the gadget is not the Exchanger, as in Java.
+    fn is_exchanging_valid(&self, pos: [i32; 3]) -> bool {
+        if !self.exchanging {
+            return true;
+        }
+        let Some(old) = self.blocks.state(pos) else {
+            return false;
+        };
+        let name = old.split('[').next().unwrap_or(&old);
+        if self.blocks.is_air(name) {
+            return false;
+        }
+        // `GadgetUtils.isValidBlockState`: the port's own render block is
+        // never exchanged, and neither is a block the gadget could not place.
+        if name == "buildinggadgets2:render_block" {
+            return false;
+        }
+        if self.blocks.has_block_entity(pos) && !self.settings.affect_tiles {
+            return false;
+        }
+        if self.settings.fuzzy {
+            // Fuzzy takes any block but the one it would place.
+            old != self.state
+        } else {
+            // Otherwise only blocks like the one being looked at.
+            self.blocks.state(self.start).is_some_and(|look| look == old)
+        }
     }
 }
 
-/// `BaseMode.collect`: the offsets from the hit block a build would fill.
+/// `BaseMode.collect` without an anchor: the offsets from the hit block a
+/// build would fill.
 ///
-/// `start` is the hit block and `hit_side` the face it was hit on, as
-/// `BaseGadget.getHitPos` and the hit result give them. The result is
-/// relative to `start`.
-///
-/// The anchor branch of `BaseMode.collect` (an anchor list set by the anchor
-/// key) is M3's; with no anchor it goes straight to `collectWorld`.
-pub fn collect(
-    mode: Mode,
-    blocks: &dyn Blocks,
-    hit_side: Face,
-    start: [i32; 3],
-    player: PlayerAt,
-    settings: Settings,
-) -> Vec<[i32; 3]> {
+/// The anchor branch (`GadgetNBT.getAnchorList` non-empty) is handled by the
+/// caller, since it replaces the mode entirely.
+pub fn collect(mode: Mode, ctx: &Ctx<'_>) -> Vec<[i32; 3]> {
     match mode {
-        Mode::BuildToMe => build_to_me(blocks, hit_side, start, player, settings),
+        Mode::BuildToMe => build_to_me(ctx),
+        Mode::VerticalWall => vertical_wall(ctx),
+        Mode::VerticalColumn => vertical_column(ctx),
+        Mode::Surface => surface(ctx),
+        Mode::HorizontalWall => horizontal_wall(ctx),
+        Mode::Stairs => stairs(ctx),
+        Mode::HorizontalRow => horizontal_row(ctx),
+        Mode::Grid => grid(ctx),
+        // Copy, Cut and Paste do not collect from the world: they work on a
+        // stored snapshot, which is M6.
+        Mode::Copy | Mode::Cut | Mode::Paste => Vec::new(),
     }
+}
+
+/// `pos - start`.
+fn rel(pos: [i32; 3], start: [i32; 3]) -> [i32; 3] {
+    [pos[0] - start[0], pos[1] - start[1], pos[2] - start[2]]
 }
 
 /// `BuildToMe.collectWorld`.
 ///
-/// ```text
-/// int startCoord  = hitSide.getAxis().choose(start.getX(), start.getY(), start.getZ());
-/// double yPos     = placeontop ? player.getEyeY() : player.getBlockY();
-/// int playerCoord = hitSide.getAxis().choose(px, (int) yPos, pz);
-/// double difference = Math.max(0, Math.min(32, Math.abs(startCoord - playerCoord)));
-/// for (int i = 1; i < difference; i++) { ... }
-/// ```
-///
-/// Two details of that are easy to lose and are kept here:
-///
-/// - the loop is `i < difference`, so the block at the player's own coordinate
-///   is **not** placed — a run of `difference - 1` blocks;
-/// - `(int) yPos` truncates towards zero, which is not `getBlockY()`'s floor.
-///   Below y 0 the two differ, so the eye case truncates and the feet case
-///   floors, as in Java.
-fn build_to_me(
-    blocks: &dyn Blocks,
-    hit_side: Face,
-    start: [i32; 3],
-    player: PlayerAt,
-    settings: Settings,
-) -> Vec<[i32; 3]> {
-    let axis = hit_side.axis();
-    let start_coord = axis.choose(start[0], start[1], start[2]);
-    let player_y = if settings.place_on_top {
-        // Java's `(int) double`: towards zero.
-        player.eye_y as i32
+/// Two details that are easy to lose and are kept here: the loop is
+/// `i < difference`, so the block at the player's own coordinate is **not**
+/// placed, and `(int) yPos` truncates towards zero, which is not
+/// `getBlockY()`'s floor — below y 0 the two differ.
+fn build_to_me(ctx: &Ctx<'_>) -> Vec<[i32; 3]> {
+    let axis = ctx.hit_side.axis();
+    let start_coord = axis.choose(ctx.start[0], ctx.start[1], ctx.start[2]);
+    let player_y = if ctx.settings.place_on_top {
+        ctx.player.eye_y as i32 // Java's `(int)`: towards zero.
     } else {
-        player.block[1]
+        ctx.player.block[1]
     };
-    let player_coord = axis.choose(player.block[0], player_y, player.block[2]);
+    let player_coord = axis.choose(ctx.player.block[0], player_y, ctx.player.block[2]);
 
     let difference = (start_coord - player_coord).abs().clamp(0, 32);
     let mut out = Vec::new();
     for i in 1..difference {
-        if is_pos_valid(blocks, hit_side.relative(start, i)) {
-            out.push(hit_side.relative([0, 0, 0], i));
+        if ctx.is_pos_valid(ctx.hit_side.relative(ctx.start, i)) {
+            out.push(ctx.hit_side.relative([0, 0, 0], i));
         }
     }
     out
 }
 
-/// `BaseMode.isPosValid` for a mode that is not exchanging.
-///
-/// The Java checks, in order:
-///
-/// 1. `isExchangingValid` — exchanging only, so not here;
-/// 2. `y >= level.getMaxY() || y < level.getMinY()`;
-/// 3. `blockState.canSurvive(level, pos)` — **not ported yet**: Horizon has no
-///    helper that asks a state whether it can stay at a position, so a build
-///    of blocks that need support (a torch, a sapling) is not filtered here
-///    and those blocks drop when placed. It matters for nothing a full block
-///    does, which is what M2 places;
-/// 4. `level.mayInteract(player, pos)` — `Host::may_build`;
-/// 5. the block there `canBeReplaced()`.
-pub fn is_pos_valid(blocks: &dyn Blocks, pos: [i32; 3]) -> bool {
-    let (min_y, height) = blocks.height();
-    if pos[1] >= min_y + height || pos[1] < min_y {
-        return false;
+/// `VerticalWall.collectWorld`: a wall standing up from the hit block.
+fn vertical_wall(ctx: &Ctx<'_>) -> Vec<[i32; 3]> {
+    let range = ctx.settings.range;
+    let size = range / 2;
+    let vertical = ctx.hit_side.axis() == Axis::Y;
+
+    // Looking up or down, the wall faces the way the player does.
+    let side = if vertical {
+        ctx.player.facing.opposite().axis()
+    } else {
+        ctx.hit_side.axis()
+    };
+
+    let (start_y, end_y) = if vertical {
+        (
+            ctx.start[1] + 1,
+            ctx.start[1] + (range - 1) * if ctx.hit_side == Face::Down { -1 } else { 1 } + 1,
+        )
+    } else {
+        (ctx.start[1] - size, ctx.start[1] + size)
+    };
+
+    let spread_x = if side == Axis::Z { size } else { 0 };
+    let spread_z = if side == Axis::X { size } else { 0 };
+    let box_ = Box3 {
+        min: [ctx.start[0] - spread_x, start_y.min(end_y), ctx.start[2] - spread_z],
+        max: [ctx.start[0] + spread_x, start_y.max(end_y), ctx.start[2] + spread_z],
+    };
+    box_.positions()
+        .filter(|p| ctx.is_pos_valid(*p))
+        .map(|p| rel(p, ctx.start))
+        .collect()
+}
+
+/// `VerticalColumn.collectWorld`: a column, which the Exchanger reads
+/// differently on a horizontal face.
+fn vertical_column(ctx: &Ctx<'_>) -> Vec<[i32; 3]> {
+    let range = ctx.settings.range;
+    let half = range / 2;
+    let mut out = Vec::new();
+
+    if ctx.hit_side.axis() == Axis::Y {
+        if ctx.exchanging {
+            // The Exchanger runs along the way the player faces instead.
+            let facing = ctx.player.facing;
+            for i in -half..=half {
+                if ctx.is_pos_valid(facing.relative(ctx.start, i)) {
+                    out.push(facing.relative([0, 0, 0], i));
+                }
+            }
+        } else {
+            for i in 1..range + 1 {
+                if ctx.is_pos_valid(ctx.hit_side.relative(ctx.start, i)) {
+                    out.push(ctx.hit_side.relative([0, 0, 0], i));
+                }
+            }
+        }
+    } else {
+        for i in -half..=half {
+            if ctx.is_pos_valid(Face::Up.relative(ctx.start, i)) {
+                out.push(Face::Up.relative([0, 0, 0], i));
+            }
+        }
     }
-    if !blocks.may_place(pos) {
-        return false;
+
+    if ctx.exchanging && ctx.settings.connected_area {
+        return remove_unconnected(ctx, [0, 0, 0], out);
     }
-    blocks.is_replaceable(pos)
+    out
+}
+
+/// `Surface.collectWorld`: the square face around the hit block.
+fn surface(ctx: &Ctx<'_>) -> Vec<[i32; 3]> {
+    let bound = ctx.settings.range / 2;
+    let looking_at = ctx.blocks.state(ctx.start);
+    let start_at = if ctx.exchanging {
+        ctx.start
+    } else {
+        ctx.hit_side.relative(ctx.start, 1)
+    };
+    let out: Vec<[i32; 3]> = square_area(start_at, ctx.hit_side, bound)
+        .positions()
+        .filter(|p| ctx.is_pos_valid(*p) && surface_backed(ctx, *p, looking_at.as_deref()))
+        .map(|p| rel(p, ctx.start))
+        .collect();
+
+    if ctx.exchanging && ctx.settings.connected_area {
+        return remove_unconnected(ctx, rel(start_at, ctx.start), out);
+    }
+    out
+}
+
+/// `Surface.isPosValidCustom`: the block behind each one must match.
+fn surface_backed(ctx: &Ctx<'_>, pos: [i32; 3], looking_at: Option<&str>) -> bool {
+    if ctx.exchanging {
+        return true; // handled by isExchangingValid
+    }
+    let behind = ctx.hit_side.opposite().relative(pos, 1);
+    let Some(below) = ctx.blocks.state(behind) else {
+        return false;
+    };
+    let name = below.split('[').next().unwrap_or(&below);
+    if ctx.settings.fuzzy {
+        !ctx.blocks.is_air(name)
+    } else {
+        looking_at == Some(below.as_str())
+    }
+}
+
+/// `HorizontalWall.collectWorld`: a floor or ceiling, or a slab out of a wall.
+fn horizontal_wall(ctx: &Ctx<'_>) -> Vec<[i32; 3]> {
+    let range = ctx.settings.range;
+    let half = range / 2;
+    let mut out = Vec::new();
+
+    if ctx.hit_side.axis() == Axis::Y {
+        let lift = i32::from(ctx.settings.place_on_top);
+        for i in -half..=half {
+            for j in -half..=half {
+                // Note the minus on i, as in Java.
+                let coord = [ctx.start[0] - i, ctx.start[1] + lift, ctx.start[2] + j];
+                if ctx.is_pos_valid(coord) {
+                    out.push(rel(coord, ctx.start));
+                }
+            }
+        }
+        return out;
+    }
+
+    let axis = ctx.hit_side.axis();
+    for i in 1..range + 1 {
+        for j in -half..=half {
+            let value = invert_on_face(ctx.hit_side, i);
+            // Java gates the whole row on the position along the axis first.
+            if !ctx.is_pos_valid(ctx.hit_side.relative(ctx.start, i)) {
+                continue;
+            }
+            let coord = if axis == Axis::X {
+                [ctx.start[0] + value, ctx.start[1], ctx.start[2] + j]
+            } else {
+                [ctx.start[0] + j, ctx.start[1], ctx.start[2] + value]
+            };
+            if ctx.is_pos_valid(coord) {
+                out.push(rel(coord, ctx.start));
+            }
+        }
+    }
+    out
+}
+
+/// `MagicHelpers.invertOnFace`.
+fn invert_on_face(face: Face, value: i32) -> i32 {
+    value * if matches!(face, Face::North | Face::Down | Face::West) { -1 } else { 1 }
+}
+
+/// `Stairs.collectWorld`: a staircase climbing away from the player.
+fn stairs(ctx: &Ctx<'_>) -> Vec<[i32; 3]> {
+    let place_on_top = ctx.settings.place_on_top;
+    let side = if ctx.hit_side.axis() == Axis::Y {
+        ctx.player.facing.opposite()
+    } else {
+        ctx.hit_side
+    };
+    let range = ctx.settings.range;
+    let mut out = Vec::new();
+
+    for i in 0..range {
+        let shift = (i + 1)
+            * if matches!(ctx.hit_side, Face::East | Face::South) { 1 } else { -1 };
+
+        // Looking at a block below your feet, on a horizontal face.
+        if f64::from(ctx.start[1]) < ctx.player.y && ctx.hit_side.is_horizontal() {
+            let x_axis = ctx.hit_side.axis() == Axis::X;
+            let z_axis = ctx.hit_side.axis() == Axis::Z;
+            let coord = [
+                ctx.start[0] + if x_axis { shift } else { 0 },
+                ctx.start[1] + if place_on_top { -i } else { -(i + 1) },
+                ctx.start[2] + if z_axis { shift } else { 0 },
+            ];
+            if ctx.is_pos_valid(coord) {
+                out.push(rel(coord, ctx.start));
+            }
+            continue;
+        }
+
+        let mut shift = i * if matches!(side, Face::East | Face::South) { -1 } else { 1 };
+        if f64::from(ctx.start[1]) < ctx.player.y - 2.0 {
+            shift = -shift;
+        }
+        let rise = if f64::from(ctx.start[1]) > ctx.player.y + 1.0 { -i } else { i }
+            + i32::from(place_on_top);
+        let coord = [
+            ctx.start[0] + if side.axis() == Axis::X { shift } else { 0 },
+            ctx.start[1] + rise,
+            ctx.start[2] + if side.axis() == Axis::Z { shift } else { 0 },
+        ];
+        if ctx.is_pos_valid(coord) {
+            out.push(rel(coord, ctx.start));
+        }
+    }
+    out
+}
+
+/// `HorizontalRow.collectWorld`: a row away from the player, or across for
+/// the Exchanger.
+fn horizontal_row(ctx: &Ctx<'_>) -> Vec<[i32; 3]> {
+    let range = ctx.settings.range;
+    let start_at = if ctx.settings.place_on_top {
+        Face::Up.relative(ctx.start, 1)
+    } else {
+        ctx.start
+    };
+    let mut side = if ctx.hit_side.axis() == Axis::Y {
+        ctx.player.facing
+    } else {
+        ctx.hit_side.opposite()
+    };
+    let mut out = Vec::new();
+
+    if !ctx.exchanging {
+        for i in 0..range {
+            let pos = side.relative(start_at, i);
+            if ctx.is_pos_valid(pos) {
+                out.push(rel(pos, ctx.start));
+            }
+        }
+    } else {
+        side = side.clockwise();
+        let half = range / 2;
+        for i in -half..=half {
+            let pos = side.relative(start_at, i);
+            if ctx.is_pos_valid(pos) {
+                out.push(rel(pos, ctx.start));
+            }
+        }
+    }
+
+    if ctx.exchanging && ctx.settings.connected_area {
+        return remove_unconnected(ctx, rel(start_at, ctx.start), out);
+    }
+    out
+}
+
+/// `Grid.collectWorld`: a lattice of single blocks.
+///
+/// The spacing is `((range - 2) % 6) + 2` and the extent `range * 7 / 5`, both
+/// with Java's truncating division and remainder, which Rust's `/` and `%`
+/// match for these values.
+fn grid(ctx: &Ctx<'_>) -> Vec<[i32; 3]> {
+    let range = ctx.settings.range + 1;
+    let start_at = if ctx.settings.place_on_top {
+        Face::Up.relative(ctx.start, 1)
+    } else {
+        ctx.start
+    };
+    let spacing = ((range - 2) % 6) + 2;
+    let extent = range * 7 / 5;
+    let mut out = Vec::new();
+
+    for x in (range * -7 / 5)..=extent {
+        for z in (range * -7 / 5)..=extent {
+            if spacing == 0 || x % spacing != 0 || z % spacing != 0 {
+                continue;
+            }
+            let coord = [start_at[0] + x, start_at[1], start_at[2] + z];
+            if ctx.is_pos_valid(coord) {
+                out.push(rel(coord, ctx.start));
+            }
+        }
+    }
+    out
+}
+
+/// `BaseMode.removeUnConnected`: keep only what the start reaches.
+///
+/// A breadth-first walk from `start_at` through the collected positions, in
+/// the four directions across the hit face. Java returns a `HashSet`, so its
+/// order is arbitrary; this answers them sorted, which only matters when
+/// materials run short and some positions are dropped.
+fn remove_unconnected(
+    ctx: &Ctx<'_>,
+    start_at: [i32; 3],
+    coordinates: Vec<[i32; 3]>,
+) -> Vec<[i32; 3]> {
+    if coordinates.is_empty() {
+        return coordinates;
+    }
+    let known: HashSet<[i32; 3]> = coordinates.iter().copied().collect();
+    let mut visited: HashSet<[i32; 3]> = HashSet::new();
+    let mut queue: VecDeque<[i32; 3]> = VecDeque::new();
+    queue.push_back(start_at);
+
+    let across: Vec<Face> = Face::ALL
+        .into_iter()
+        .filter(|f| f.axis() != ctx.hit_side.axis())
+        .collect();
+
+    while let Some(current) = queue.pop_front() {
+        if visited.contains(&current) || !known.contains(&current) {
+            continue;
+        }
+        visited.insert(current);
+        for face in &across {
+            let next = face.relative(current, 1);
+            if known.contains(&next) {
+                queue.push_back(next);
+            }
+        }
+    }
+
+    let mut out: Vec<[i32; 3]> = visited.into_iter().collect();
+    out.sort_unstable();
+    out
+}
+
+/// A box of block positions, as `BlockPos.betweenClosedStream(AABB)` walks it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Box3 {
+    min: [i32; 3],
+    max: [i32; 3],
+}
+
+impl Box3 {
+    fn positions(self) -> impl Iterator<Item = [i32; 3]> {
+        let Box3 { min, max } = self;
+        (min[0]..=max[0]).flat_map(move |x| {
+            (min[1]..=max[1])
+                .flat_map(move |y| (min[2]..=max[2]).map(move |z| [x, y, z]))
+        })
+    }
+}
+
+/// `GadgetUtils.getSquareArea`: the square on the plane of `face`.
+fn square_area(pos: [i32; 3], face: Face, range: i32) -> Box3 {
+    match face.axis() {
+        Axis::Y => Box3 {
+            min: [pos[0] - range, pos[1], pos[2] - range],
+            max: [pos[0] + range, pos[1], pos[2] + range],
+        },
+        Axis::Z => Box3 {
+            min: [pos[0] - range, pos[1] - range, pos[2]],
+            max: [pos[0] + range, pos[1] + range, pos[2]],
+        },
+        Axis::X => Box3 {
+            min: [pos[0], pos[1] - range, pos[2] - range],
+            max: [pos[0], pos[1] + range, pos[2] + range],
+        },
+    }
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::world::Fake;
-
-    fn player_at(x: i32, y: i32, z: i32) -> PlayerAt {
-        PlayerAt {
-            block: [x, y, z],
-            eye_y: f64::from(y) + 1.62,
-        }
-    }
-
-    #[test]
-    fn builds_a_line_towards_the_player_and_stops_one_short() {
-        // Standing at x 0, looking at a block's west face at x 10. The run
-        // goes 1..difference, difference = |10 - 0| = 10, so offsets 1..9 —
-        // nine blocks, ending one short of the player's own column.
-        let w = Fake::new().bounds(0, 16).with([10, 0, 0], "minecraft:stone");
-        let out = collect(
-            Mode::BuildToMe,
-            &w,
-            Face::West,
-            [10, 0, 0],
-            player_at(0, 0, 0),
-            Settings::default(),
-        );
-        assert_eq!(out.len(), 9);
-        assert_eq!(out.first(), Some(&[-1, 0, 0]));
-        assert_eq!(out.last(), Some(&[-9, 0, 0]));
-    }
-
-    #[test]
-    fn the_range_is_clamped_to_32() {
-        let w = Fake::new().bounds(0, 16);
-        let out = collect(
-            Mode::BuildToMe,
-            &w,
-            Face::West,
-            [100, 0, 0],
-            player_at(0, 0, 0),
-            Settings::default(),
-        );
-        // min(32, 100) = 32, loop 1..32 → 31 blocks.
-        assert_eq!(out.len(), 31);
-        assert_eq!(out.last(), Some(&[-31, 0, 0]));
-    }
-
-    #[test]
-    fn standing_on_the_hit_column_places_nothing() {
-        let w = Fake::new().bounds(0, 16);
-        for face in [Face::West, Face::Up, Face::North] {
-            let out = collect(
-                Mode::BuildToMe,
-                &w,
-                face,
-                [5, 5, 5],
-                player_at(5, 5, 5),
-                Settings::default(),
-            );
-            assert!(out.is_empty(), "{face:?} should place nothing");
-        }
-    }
-
-    #[test]
-    fn one_block_apart_places_nothing() {
-        // difference = 1, loop `1 < 1` never runs. The Java mod behaves the
-        // same way: Build to Me never fills the single gap.
-        let w = Fake::new().bounds(0, 16);
-        let out = collect(
-            Mode::BuildToMe,
-            &w,
-            Face::West,
-            [1, 0, 0],
-            player_at(0, 0, 0),
-            Settings::default(),
-        );
-        assert!(out.is_empty());
-    }
-
-    #[test]
-    fn place_on_top_measures_to_the_eye() {
-        let w = Fake::new().bounds(0, 16);
-        // Feet at y 0, eyes at 1.62. Hitting the top face of a block at y 10.
-        let down = collect(
-            Mode::BuildToMe,
-            &w,
-            Face::Down,
-            [0, 10, 0],
-            player_at(0, 0, 0),
-            Settings::default(),
-        );
-        // |10 - 0| = 10 → 9 blocks.
-        assert_eq!(down.len(), 9);
-
-        let on_top = collect(
-            Mode::BuildToMe,
-            &w,
-            Face::Down,
-            [0, 10, 0],
-            player_at(0, 0, 0),
-            Settings {
-                place_on_top: true,
-                ..Settings::default()
-            },
-        );
-        // (int) 1.62 = 1, |10 - 1| = 9 → 8 blocks.
-        assert_eq!(on_top.len(), 8);
-    }
-
-    #[test]
-    fn the_eye_cast_truncates_towards_zero_below_y_zero() {
-        // Java's `(int) yPos` truncates, `getBlockY()` floors. At eye
-        // -3.38 the two differ: (int) gives -3, floor gives -4.
-        let w = Fake::new().bounds(-64, 384);
-        let player = PlayerAt {
-            block: [0, -5, 0],
-            eye_y: -3.38,
-        };
-        let feet = collect(
-            Mode::BuildToMe,
-            &w,
-            Face::Down,
-            [0, 10, 0],
-            player,
-            Settings::default(),
-        );
-        // |10 - (-5)| = 15 → 14 blocks.
-        assert_eq!(feet.len(), 14);
-
-        let eye = collect(
-            Mode::BuildToMe,
-            &w,
-            Face::Down,
-            [0, 10, 0],
-            player,
-            Settings {
-                place_on_top: true,
-                ..Settings::default()
-            },
-        );
-        // (int) -3.38 = -3 (towards zero), |10 - (-3)| = 13 → 12 blocks.
-        // A floor would give -4 and 13 blocks, so this pins the difference.
-        assert_eq!(eye.len(), 12);
-    }
-
-    #[test]
-    fn every_face_runs_the_right_way() {
-        let w = Fake::new().bounds(0, 64);
-        let cases = [
-            (Face::West, [10, 0, 0], [0, 0, 0], [-1, 0, 0]),
-            (Face::East, [0, 0, 0], [10, 0, 0], [1, 0, 0]),
-            (Face::Down, [0, 10, 0], [0, 0, 0], [0, -1, 0]),
-            (Face::Up, [0, 0, 0], [0, 10, 0], [0, 1, 0]),
-            (Face::North, [0, 0, 10], [0, 0, 0], [0, 0, -1]),
-            (Face::South, [0, 0, 0], [0, 0, 10], [0, 0, 1]),
-        ];
-        for (face, start, player, first) in cases {
-            let out = collect(
-                Mode::BuildToMe,
-                &w,
-                face,
-                start,
-                player_at(player[0], player[1], player[2]),
-                Settings::default(),
-            );
-            assert_eq!(out.len(), 9, "{face:?}");
-            assert_eq!(out.first(), Some(&first), "{face:?}");
-        }
-    }
-
-    #[test]
-    fn blocks_in_the_way_are_left_out_but_do_not_stop_the_run() {
-        // isPosValid is checked per position, and an invalid one is skipped
-        // rather than ending the run: the Java loop has no break.
-        let w = Fake::new()
-            .bounds(0, 16)
-            .with([10, 0, 0], "minecraft:stone")
-            .with([5, 0, 0], "minecraft:dirt");
-        let out = collect(
-            Mode::BuildToMe,
-            &w,
-            Face::West,
-            [10, 0, 0],
-            player_at(0, 0, 0),
-            Settings::default(),
-        );
-        // Nine candidates at x 9..1; x 5 is taken by dirt, which is not
-        // replaceable, so eight remain and the run continues past it.
-        assert_eq!(out.len(), 8);
-        assert!(!out.contains(&[-5, 0, 0]));
-        assert!(out.contains(&[-6, 0, 0]));
-        assert!(out.contains(&[-4, 0, 0]));
-    }
-
-    #[test]
-    fn replaceable_blocks_are_built_over() {
-        let mut w = Fake::new().bounds(0, 16).with([5, 0, 0], "minecraft:short_grass");
-        w.replaceable.insert("minecraft:short_grass".to_owned());
-        let out = collect(
-            Mode::BuildToMe,
-            &w,
-            Face::West,
-            [10, 0, 0],
-            player_at(0, 0, 0),
-            Settings::default(),
-        );
-        assert_eq!(out.len(), 9);
-        assert!(out.contains(&[-5, 0, 0]));
-    }
-
-    #[test]
-    fn the_worlds_floor_and_ceiling_cut_the_run() {
-        // A world from y 0 to 16, building down from y 10 towards a player
-        // far below: positions under y 0 are left out.
-        let w = Fake::new().bounds(0, 16);
-        let out = collect(
-            Mode::BuildToMe,
-            &w,
-            Face::Down,
-            [0, 10, 0],
-            player_at(0, -20, 0),
-            Settings::default(),
-        );
-        // Candidates y 9 down to 10-29; only y 9..0 are in the world.
-        assert_eq!(out.len(), 10);
-        assert_eq!(out.last(), Some(&[0, -10, 0]));
-    }
-
-    #[test]
-    fn protected_positions_are_left_out() {
-        let mut w = Fake::new().bounds(0, 16);
-        w.protected.insert([5, 0, 0]);
-        let out = collect(
-            Mode::BuildToMe,
-            &w,
-            Face::West,
-            [10, 0, 0],
-            player_at(0, 0, 0),
-            Settings::default(),
-        );
-        assert_eq!(out.len(), 8);
-        assert!(!out.contains(&[-5, 0, 0]));
-    }
-
-    #[test]
-    fn an_unloaded_position_is_not_built() {
-        let mut w = Fake::new().bounds(0, 16);
-        w.unloaded.insert([5, 0, 0]);
-        let out = collect(
-            Mode::BuildToMe,
-            &w,
-            Face::West,
-            [10, 0, 0],
-            player_at(0, 0, 0),
-            Settings::default(),
-        );
-        assert_eq!(out.len(), 8);
-    }
-
-    #[test]
-    fn mode_ids_round_trip() {
-        assert_eq!(Mode::from_id("buildinggadgets2:build_to_me"), Some(Mode::BuildToMe));
-        assert_eq!(Mode::from_id("buildinggadgets2:stairs"), None);
-        assert_eq!(Mode::BuildToMe.i18n(), "buildinggadgets2.modes.build_to_me");
-    }
-}
+#[path = "modes_tests.rs"]
+mod tests;

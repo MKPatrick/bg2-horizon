@@ -89,6 +89,38 @@ impl Face {
     pub fn from_step(step: [i32; 3]) -> Option<Face> {
         Face::ALL.into_iter().find(|f| f.step() == step)
     }
+
+    /// `Direction.fromYRot`: the horizontal direction a yaw faces, which is
+    /// what `player.getDirection()` answers.
+    ///
+    /// Vanilla is `BY_2D[floor(yRot / 90 + 0.5) & 3]` over
+    /// `{SOUTH, WEST, NORTH, EAST}`.
+    pub fn from_yaw(yaw: f32) -> Face {
+        let i = ((f64::from(yaw) / 90.0 + 0.5).floor() as i64) & 3;
+        match i {
+            0 => Face::South,
+            1 => Face::West,
+            2 => Face::North,
+            _ => Face::East,
+        }
+    }
+
+    /// `Direction.getClockWise()` for a horizontal face; a vertical one is
+    /// answered unchanged, as vanilla throws there and the modes never ask.
+    pub fn clockwise(self) -> Face {
+        match self {
+            Face::North => Face::East,
+            Face::East => Face::South,
+            Face::South => Face::West,
+            Face::West => Face::North,
+            other => other,
+        }
+    }
+
+    /// Whether the face lies in the horizontal plane (`Axis.isHorizontal`).
+    pub fn is_horizontal(self) -> bool {
+        !matches!(self, Face::Up | Face::Down)
+    }
 }
 
 impl Axis {
@@ -123,6 +155,15 @@ pub trait Blocks {
         matches!(block, "minecraft:water" | "minecraft:lava")
     }
 
+    /// The whole block state at `pos` with its properties
+    /// (`minecraft:oak_stairs[facing=east,...]`), as `/setblock` writes it.
+    /// The exchanger compares states, not names.
+    fn state(&self, pos: [i32; 3]) -> Option<String>;
+
+    /// Whether the block at `pos` has a block entity (a chest, a sign), which
+    /// the `affect_tiles` setting decides about.
+    fn has_block_entity(&self, pos: [i32; 3]) -> bool;
+
     /// Whether the block at `pos` can be built over, as
     /// `BlockState.canBeReplaced`. The server answers it from the
     /// `minecraft:replaceable` block tag.
@@ -156,6 +197,8 @@ pub struct Fake {
     pub protected: std::collections::HashSet<[i32; 3]>,
     /// Block names with no collision box (a flower, a torch).
     pub no_collision: std::collections::HashSet<String>,
+    /// Positions holding a block entity.
+    pub block_entities: std::collections::HashSet<[i32; 3]>,
     pub min_y: i32,
     pub world_height: i32,
 }
@@ -198,6 +241,14 @@ impl Blocks for Fake {
                 .cloned()
                 .unwrap_or_else(|| "minecraft:air".to_owned()),
         )
+    }
+
+    fn state(&self, pos: [i32; 3]) -> Option<String> {
+        self.block(pos)
+    }
+
+    fn has_block_entity(&self, pos: [i32; 3]) -> bool {
+        self.block_entities.contains(&pos)
     }
 
     fn is_replaceable(&self, pos: [i32; 3]) -> bool {

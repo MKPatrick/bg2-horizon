@@ -119,22 +119,39 @@ needs is in [docs/hook-map.md](docs/hook-map.md).
       pick a block it would not place; M3 brings that with the rest of the
       mode work.
 
-## M3 — Every mode
+## M3 — Every mode — **ported, in-game check pending**
 
-- [ ] Port the remaining ten modes, each with tests read off the Java source:
-      `VerticalWall`, `VerticalColumn`, `Surface`, `HorizontalWall`, `Stairs`,
-      `HorizontalRow`, `Grid`, `Copy`, `Cut`, `Paste`.
-- [ ] The `exchanging` variant of `Surface`, `VerticalColumn`, `HorizontalRow`
-      and `Grid` (the same classes with the flag set).
-- [ ] `fuzzy` and `connected_area`: the flood fill that decides a surface's
-      extent.
-- [ ] `place_on_top`, `affect_tiles`, `paste_replace`.
-- [ ] Range, and the anchor with its direction (`bind`, `bind_direction`,
-      `anchor_pos`, `anchor_list`, `anchor_side`).
-- [ ] The Exchanger: replace a block in place, drop what was there.
-- [ ] Mode and range over the network (`ModeSwitchPayload`,
-      `RangeChangePayload`, `ToggleSettingPayload`).
-- [ ] Check each mode against the Java mod for the same click.
+- [x] The other seven building modes, each read off its `collectWorld`:
+      `VerticalWall`, `VerticalColumn`, `Surface`, `HorizontalWall`,
+      `Stairs`, `HorizontalRow`, `Grid`.
+- [x] The exchanging variants of `Surface`, `VerticalColumn`,
+      `HorizontalRow` and `Grid` — the same classes with
+      `BaseMode.isExchanging`, which three of them branch on.
+- [x] `fuzzy` (Surface's backing block, and what the Exchanger accepts) and
+      `connected_area` (`BaseMode.removeUnConnected`, a breadth-first walk
+      across the hit face).
+- [x] `place_on_top` in every mode that reads it, `affect_tiles` for the
+      Exchanger, and `gadget_range`.
+- [x] The Exchanger replaces in place and gives the old blocks back
+      (`BuildingUtils.exchange`'s `returnItems`), since `edit_blocks` drops
+      nothing of its own.
+- [x] 29 more tests, each stating what the Java does for that input. Checked
+      for teeth: breaking `invertOnFace` and the grid spacing made exactly the
+      two tests that cover them fail.
+- [x] `/bg2 info | mode | range | toggle`, so the modes can be reached before
+      the screens exist (M8). Not in the Java mod — `command.rs` says why.
+- [ ] **In game:** each mode placing what it should. The unit tests pin the
+      geometry; the game has to confirm the settings reach it.
+- [ ] `ModeSwitchPayload`, `RangeChangePayload` and `ToggleSettingPayload`
+      proper, with the radial menu and the keys (M8). `/bg2` stands in.
+- [ ] The anchor (`GadgetNBT.getAnchorList`, the `anchor` key): `BaseMode.collect`
+      takes it instead of the mode when it is set.
+- [ ] `has_block_entity` is a list of vanilla block names in `host_world.rs`.
+      `block_entity_nbt` would answer it properly but needs a mutable host,
+      which the world view does not hold.
+- [ ] `removeUnConnected` answers its positions sorted; Java returns a
+      `HashSet`, so its order is arbitrary. It only shows when materials run
+      short and some positions are dropped.
 
 ## M4 — The preview
 

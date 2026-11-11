@@ -21,7 +21,7 @@ pub fn mode(host: &dyn Host, stack: &ItemStack) -> Mode {
 
 /// `GadgetNBT.setMode`.
 pub fn set_mode(host: &dyn Host, stack: &mut ItemStack, mode: Mode) {
-    let _ = host.set_component(stack, &id("gadget_mode"), Tag::String(mode.id().into()));
+    let _ = host.set_component(stack, &id("gadget_mode"), Tag::String(mode.id().as_str().into()));
 }
 
 /// `GadgetNBT.getGadgetBlockState`: the block the gadget places, as a state
@@ -41,11 +41,19 @@ pub fn range(host: &dyn Host, stack: &ItemStack) -> i32 {
     int(host, stack, "gadget_range").unwrap_or(1)
 }
 
+/// `GadgetNBT.setToolRange`.
+pub fn set_range(host: &dyn Host, stack: &mut ItemStack, range: i32) {
+    let _ = host.set_component(stack, &id("gadget_range"), Tag::Int(range));
+}
+
 /// Every setting a mode reads, in one go.
 pub fn settings(host: &dyn Host, stack: &ItemStack) -> Settings {
     Settings {
         place_on_top: toggle(host, stack, "place_on_top"),
         raytrace_fluid: toggle(host, stack, "raytrace_fluid"),
+        fuzzy: toggle(host, stack, "fuzzy"),
+        connected_area: toggle(host, stack, "connected_area"),
+        affect_tiles: toggle(host, stack, "affect_tiles"),
         range: range(host, stack),
     }
 }

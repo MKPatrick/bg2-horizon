@@ -56,6 +56,28 @@ def game_home(explicit: Path | None) -> Path:
     )
 
 
+def horizon_mod_tool(repo: Path) -> list[str] | None:
+    """How to run Horizon's content-mod tool.
+
+    It is `cargo horizon-mod` when the subcommand is on PATH, and otherwise
+    the binary built from a Horizon checkout
+    (`cargo build -p cargo-horizon-mod`), which is where it comes from while
+    the tool is not released.
+    """
+    if shutil.which("cargo-horizon-mod"):
+        return ["cargo-horizon-mod", "horizon-mod"]
+    for tree in (repo.parent / "horizon-main", repo.parent / "horizon"):
+        exe = tree / "target" / "release" / "cargo-horizon-mod.exe"
+        if exe.is_file():
+            return [str(exe), "horizon-mod"]
+        exe = tree / "target" / "release" / "cargo-horizon-mod"
+        if exe.is_file():
+            return [str(exe), "horizon-mod"]
+    if shutil.which("cargo"):
+        return ["cargo", "horizon-mod"]
+    return None
+
+
 def launcher() -> Path | None:
     local = os.environ.get("LOCALAPPDATA")
     if local:
@@ -117,11 +139,14 @@ def main() -> int:
         "the combined .hmod (code, for horizon-native-mods)",
     )
     content_dir = repo / "bg2-content"
-    run(
-        ["cargo", "horizon-mod", "build"],
-        "the content .hmod (for horizon-mods)",
-        cwd=content_dir,
-    )
+    tool = horizon_mod_tool(repo)
+    if tool is None:
+        raise SystemExit(
+            "error: Horizon's content-mod tool was not found. Build it from a "
+            "Horizon checkout with `cargo build -p cargo-horizon-mod`, or put "
+            "`cargo-horizon-mod` on PATH."
+        )
+    run([*tool, "build"], "the content .hmod (for horizon-mods)", cwd=content_dir)
 
     print("\ninstalling:")
     code = repo / "dist" / f"{MOD_ID}.hmod"

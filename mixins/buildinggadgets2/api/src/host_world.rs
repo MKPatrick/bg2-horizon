@@ -47,6 +47,54 @@ impl Blocks for HostBlocks<'_> {
         self.host.level_block(self.level, pos)
     }
 
+    fn state(&self, pos: [i32; 3]) -> Option<String> {
+        if !self.host.level_is_loaded(self.level, pos) {
+            return None;
+        }
+        self.host.level_block_state(self.level, pos)
+    }
+
+    fn has_block_entity(&self, pos: [i32; 3]) -> bool {
+        // `block_entity_nbt` needs a mutable host, which this view does not
+        // hold, so the block's own name decides. It covers what the
+        // `affect_tiles` setting is really about — a chest or a sign losing
+        // its contents — but a mod block entity whose name is not listed here
+        // is not recognised. TODO.md carries this under M3.
+        self.block(pos).is_some_and(|b| {
+            matches!(
+                b.as_str(),
+                "minecraft:chest"
+                    | "minecraft:trapped_chest"
+                    | "minecraft:barrel"
+                    | "minecraft:furnace"
+                    | "minecraft:blast_furnace"
+                    | "minecraft:smoker"
+                    | "minecraft:hopper"
+                    | "minecraft:dropper"
+                    | "minecraft:dispenser"
+                    | "minecraft:shulker_box"
+                    | "minecraft:brewing_stand"
+                    | "minecraft:beacon"
+                    | "minecraft:lectern"
+                    | "minecraft:jukebox"
+                    | "minecraft:campfire"
+                    | "minecraft:soul_campfire"
+                    | "minecraft:crafter"
+                    | "minecraft:chiseled_bookshelf"
+                    | "minecraft:decorated_pot"
+                    | "minecraft:enchanting_table"
+                    | "minecraft:ender_chest"
+                    | "minecraft:sign"
+                    | "minecraft:spawner"
+            ) || b.ends_with("_sign")
+                || b.ends_with("_shulker_box")
+                || b.ends_with("_banner")
+                || b.ends_with("_bed")
+                || b.ends_with("_skull")
+                || b.ends_with("_head")
+        })
+    }
+
     fn is_replaceable(&self, pos: [i32; 3]) -> bool {
         let Some(block) = self.block(pos) else {
             return false;

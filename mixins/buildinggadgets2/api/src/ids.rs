@@ -7,6 +7,9 @@
 /// The mod's namespace, as the Java mod's `MODID`.
 pub const MOD_ID: &str = "buildinggadgets2";
 
+/// The Exchanger, whose modes behave differently (`BaseMode.isExchanging`).
+pub const EXCHANGER: &str = "buildinggadgets2:gadget_exchanging";
+
 /// The five gadgets, in the order the creative tab lists them.
 pub const GADGETS: [&str; 5] = [
     "buildinggadgets2:gadget_building",

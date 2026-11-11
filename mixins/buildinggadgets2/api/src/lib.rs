@@ -13,10 +13,12 @@
 //! undo and the screens are later milestones.
 
 use horizon_client::mod_api::{
-    ComponentTypesEvent, Flow, Hooks, Host, ItemStack, UseItemEvent, UseItemOnEvent,
+    ComponentTypesEvent, Flow, Hooks, Host, ItemStack, PerformCommandEvent,
+    RegisterCommandsEvent, UseItemEvent, UseItemOnEvent,
 };
 
 pub mod build;
+pub mod command;
 pub mod host_world;
 pub mod ids;
 pub mod modes;
@@ -93,6 +95,22 @@ impl Hooks for BuildingGadgets2 {
     /// [`ids::component_ids`].
     fn component_types(&self, event: &mut ComponentTypesEvent<'_>) {
         event.types.extend(ids::component_ids());
+    }
+
+    /// `/bg2`, which reaches a gadget's mode and settings until the screens
+    /// exist (M8). Not in the Java mod; see `command.rs`.
+    fn register_commands(&self, _host: &mut dyn Host, event: &mut RegisterCommandsEvent<'_>) {
+        event.commands.extend(command::commands());
+    }
+
+    /// A player ran one of the commands above. Claiming it keeps the game
+    /// from answering "unknown command" for one this mod handled.
+    fn perform_command(&self, host: &mut dyn Host, event: &mut PerformCommandEvent<'_>) -> Flow {
+        if command::perform(host, event.command) {
+            Flow::Cancel
+        } else {
+            Flow::Continue
+        }
     }
 
     /// A right click with a gadget on a block in reach (`ItemStack.useOn`).

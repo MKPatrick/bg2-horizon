@@ -26,6 +26,7 @@
 //! - **`canSurvive` is not checked** (see `crate::modes::is_pos_valid`).
 
 use crate::host_world::HostBlocks;
+use crate::ids;
 use crate::modes::{self, PlayerAt};
 use crate::world::Blocks;
 use crate::ray;
@@ -66,6 +67,8 @@ fn player_at(host: &dyn Host, player: &NativeServerPlayer) -> (PlayerAt, [f64; 3
             feet[2].floor() as i32,
         ],
         eye_y: eye[1],
+        y: feet[1],
+        facing: crate::world::Face::from_yaw(player.yaw),
     };
     (at, eye)
 }
@@ -144,7 +147,16 @@ pub fn build(
     // The offsets the mode fills, relative to the hit block.
     let offsets = {
         let blocks = HostBlocks::new(host, &player.dimension, (player.uuid, &player.name))?;
-        modes::collect(mode, &blocks, face, start, at, settings)
+        let ctx = modes::Ctx {
+            blocks: &blocks,
+            exchanging: gadget.item.as_ref() == ids::EXCHANGER,
+            settings,
+            player: at,
+            hit_side: face,
+            start,
+            state: &state,
+        };
+        modes::collect(mode, &ctx)
     };
     if offsets.is_empty() {
         return Some(Built::default());
@@ -155,6 +167,21 @@ pub fn build(
         .iter()
         .map(|o| [start[0] + o[0], start[1] + o[1], start[2] + o[2]])
         .collect();
+
+    // What the Exchanger is about to replace, so it can be given back.
+    //
+    // `BuildingUtils.exchange` passes `returnItems` to the tick handler,
+    // which drops the old block for the player. `edit_blocks` is `fill …
+    // strict` and drops nothing, so the old blocks are counted here and
+    // handed over after the edit. One item per block, as M2 does for the
+    // materials: the state's real drops are a later refinement.
+    let exchanging = gadget.item.as_ref() == ids::EXCHANGER;
+    let replaced: Vec<String> = if exchanging {
+        let blocks = HostBlocks::new(host, &player.dimension, (player.uuid, &player.name))?;
+        positions.iter().filter_map(|p| blocks.block(*p)).collect()
+    } else {
+        Vec::new()
+    };
 
     // Materials, unless creative. The Java mod checks them per position and
     // skips the ones it cannot pay for.
@@ -223,6 +250,18 @@ pub fn build(
         let unused = u64::try_from(affordable.len()).unwrap_or(u64::MAX).saturating_sub(placed);
         if unused > 0 {
             host.give_items(&item, u32::try_from(unused).unwrap_or(u32::MAX));
+        }
+    }
+
+    // Give the Exchanger's old blocks back, unless creative.
+    if exchanging && !creative && placed > 0 {
+        let mut counts: std::collections::BTreeMap<&str, u32> =
+            std::collections::BTreeMap::new();
+        for name in replaced.iter().take(placed as usize) {
+            *counts.entry(name.as_str()).or_default() += 1;
+        }
+        for (name, count) in counts {
+            host.give_items(name, count);
         }
     }
 
