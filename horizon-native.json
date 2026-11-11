@@ -1,6 +1,6 @@
 {
   "game": "26.3",
-  "hooks": 65,
+  "hooks": 415,
   "horizon": "TODO-pin-the-commit-this-was-tested-on",
   "id": "buildinggadgets2",
   "mixins": "TODO-pin-the-horizon-mixins-commit-at-release",

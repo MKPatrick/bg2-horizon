@@ -92,14 +92,33 @@ world-level stores are attachments, below.
 | `BuildingUtils` placing many blocks | `edit_blocks` (one packed write per section, as `fill … strict`), block entity NBT through `NativeBlockEdit.block_entities` | 126 |
 | a single placement that must tell its neighbours | `set_block` | — |
 | taking and giving the player's materials | `count_items`, `take_items`, `give_items` | 9 |
-| protection checks (claims, spawn) | `may_build` → every mod's `can_build` | pending¹ |
+| protection checks (claims, spawn) | `may_build`, which **is** there as a helper¹ | unstamped |
+| `BlockState.canBeReplaced` | `block_name_in_tag(block, "minecraft:replaceable")` | unstamped |
+| `Player.isShiftKeyDown` (pick vs build) | `sneaking()` — what `UseOnContext.isSecondaryUseActive` reads | unstamped |
+| `VectorHelper.getLookingAt` | no server-side helper: `raycast` and `view_hit` are the client's own view. A voxel walk of ours over `entity_eye_position` + `view_vector`, with `block_collision` for shapes (`api/src/ray.rs`) | 363, 379 |
+| writing a changed gadget back | `living_set_equipment(living, MainHand/OffHand, stack)`: the use hooks hand the stack out behind a shared reference | unstamped |
 | `Item.appendHoverText` | `tooltip` | 12 |
 | `BuildingGadgets2Commands`, `RedprintCommand` | `register_commands`, `perform_command` | 8 |
 | build and destroy particles | `send_particles`, `ParticleOptions::named` for the mod's own | 11, 103 |
 
-¹ `can_build` / `may_build` carry an unstamped `@API:can_build@` placeholder in
-this snapshot. Confirm the number before relying on them; until then place
-without the check, as the Java mod does.
+¹ An earlier draft of this document called the protection check unavailable,
+on the grounds that `can_build`'s API number is an unstamped
+`@API:can_build@`. That was too pessimistic: `Host::may_build` is in the
+generated host trait and compiles, so the check is made. What the unstamped
+number means is only that the mod cannot name a version below the catalog's
+own — see the note on `hooks` below.
+
+## What `hooks` has to say
+
+A mod declares `"hooks": N` and the launcher builds it on any Horizon at N or
+later. **The helpers a mod calls set the same floor as the hooks it
+implements**: a helper that is not there yet does not compile. Several helpers
+this port needs carry an unstamped `@API:host_bridge@` instead of a number
+(`sneaking`, `block_name_in_tag`, `may_build`, `component`,
+`living_set_equipment`, `action_bar`), so no version below the catalog's own is
+known to have them, and `hooks` is the catalog's API — 415 in this snapshot.
+`tools/check_bundle.py` scans the source for helper calls and works that floor
+out, so the manifest cannot drift below what the code needs.
 
 ## The stores the Java mod keeps in `SavedData`
 

@@ -52,24 +52,55 @@ needs is in [docs/hook-map.md](docs/hook-map.md).
 - [ ] The render block's look is `minecraft:barrier` with hardness 20. Enough
       until M10 puts the build animation on it; revisit then.
 
-## M2 — One block placed
+## M2 — One block placed — **done except the in-game check**
 
 - [x] `component_types` (API 65): all 28 of `BG2DataComponents`' components
-      registered in `api/src/ids.rs`, with tests that they are unique,
-      namespaced and complete.
-- [ ] Port `VectorHelper` / `VecHelper`: the ray cast from the player's eye,
-      with and without fluids (`raytrace_fluid`).
-- [ ] Port `UseContext` and `BuildingUtils`' placement check: can this position
-      take a block, is it replaceable, is it in range, is it loaded.
-- [ ] Port `BaseMode` and `BuildToMe` only, with its tests.
-- [ ] Count and take the player's materials (`native_count_items`,
-      `native_take_items`), creative mode excepted.
-- [ ] Write the blocks with `native_edit_blocks` (API 126): build the palette
-      and the runs, one call per build.
-- [ ] `native_use_item_on` + `native_use_item` (API 13): the right click that
-      starts a build, claimed so the item's own use does not also run.
-- [ ] Check in game: a line of blocks placed, materials consumed, survives a
-      reload.
+      registered in `api/src/ids.rs`, with tests.
+- [x] The raycast (`VectorHelper.getLookingAt`): a voxel walk from the player's
+      eye, 32 blocks, with and without fluids, in `api/src/ray.rs`. It runs on
+      the server, as the Java `use` does, so the build stays authoritative.
+      Uses a block's collision boxes where it has them.
+- [x] `is_pos_valid` (`BaseMode.isPosValid`): world height, `may_build` for
+      protection, and the `minecraft:replaceable` tag for `canBeReplaced`.
+- [x] `BaseMode.collect` and `BuildToMe.collectWorld`, with 13 tests read off
+      the Java source — the `i < difference` run that stops one short, the
+      32-block clamp, `place_on_top` measuring to the eye, and `(int) yPos`
+      truncating towards zero where `getBlockY()` floors.
+- [x] Materials taken with `count_items` / `take_items`, creative excepted,
+      and given back when an edit places fewer blocks than were paid for.
+- [x] The blocks written with `edit_blocks` (API 126), positions grouped into
+      vertical runs (`api/src/runs.rs`, 9 tests).
+- [x] `use_item_on` and `use_item` (API 13), claiming the click with
+      `Flow::Cancel` as the Java `SUCCESS` does. In reach the hook's own pos
+      and face are used — vanilla's pick, no approximation; past it the
+      gadget's raycast runs.
+- [x] Shift-right-click picks the block looked at
+      (`GadgetBuilding.onShiftAction`), written back into the hand that holds
+      the gadget.
+- [ ] **Needs the launcher:** check in game — a line of blocks placed,
+      materials consumed, surviving a reload.
+
+### What M2 does differently from the Java mod
+
+- [ ] **The blocks appear at once.** Java hands each position to
+      `ServerTickHandler`, which places a few per tick behind the render
+      block's animation. That is M10.
+- [ ] **No energy.** The Java gadget costs 50 Forge Energy per block. Horizon
+      has no Forge Energy and whether this port charges anything is still open
+      (M10).
+- [ ] **Materials are the block's own item, one per block.** Java asks for the
+      state's silk-touch drops (`GadgetUtils.getDropsForBlockState`), which
+      differ for a few blocks (a lit redstone lamp, grass).
+- [ ] **`canSurvive` is not checked.** Horizon has no helper that asks a state
+      whether it can stay at a position, so a build of torches or saplings is
+      not filtered and those blocks drop. It does not affect full blocks.
+- [ ] **The raycast uses collision boxes, not outline shapes.** Vanilla's pick
+      uses the outline, which a server mod cannot read here. A block with no
+      collision (a flower, a torch) is treated as a whole block, so the hit
+      can differ from vanilla's by less than a block at its edges.
+- [ ] **`isValidBlockState` is not checked when picking.** Java refuses to
+      pick a block it would not place; M3 brings that with the rest of the
+      mode work.
 
 ## M3 — Every mode
 

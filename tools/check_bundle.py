@@ -87,6 +87,46 @@ HOOK_API: dict[str, int] = {
     "world_primitives": 58,
 }
 
+# A helper the mod calls sets the same floor as a hook it implements: the
+# launcher builds on any Horizon at `hooks` or later, and a helper that is not
+# there yet does not compile. These are the numbers from docs/native-mods.md
+# for the helpers this port uses. A helper whose API number is still an
+# unstamped `@API:...@` placeholder (`sneaking`, `block_name_in_tag`,
+# `may_build`, `component`, all under `@API:host_bridge@`) cannot be named, so
+# it is listed with the catalog's own API: the only version known to have it is
+# the one the mod was compiled against.
+HELPER_API: dict[str, int] = {
+    "acting_player": 8,
+    "count_items": 9,
+    "take_items": 9,
+    "give_items": 9,
+    "set_component": 65,
+    "edit_blocks": 126,
+    "block_collision": 363,
+    "entity": 379,
+    "living": 379,
+    # "Entity and level handles" (#7387) landed together.
+    "level": 379,
+    "level_block": 379,
+    "level_block_state": 379,
+    "level_height": 379,
+    "level_is_loaded": 379,
+}
+
+# Helpers with no stamped API number: they pin the mod to the catalog's own
+# version, because no earlier number is known to include them.
+UNSTAMPED_HELPERS = frozenset(
+    {
+        "sneaking",
+        "block_name_in_tag",
+        "may_build",
+        "component",
+        "living_equipment",
+        "living_set_equipment",
+        "action_bar",
+    }
+)
+
 # horizon-mixins' injection kinds (its README).
 KINDS = {"HEAD", "RETURN", "BEFORE_CALL", "AFTER_CALL", "MODIFY_ARG", "OVERWRITE"}
 
@@ -184,10 +224,39 @@ def catalog_versions(horizon: Path) -> dict[str, int | None]:
     return {h["name"]: h.get("version") for h in data.get("hooks", [])}
 
 
+def sources(api_dir: Path) -> list[Path]:
+    """The mod's own .rs files, without the build output under target/."""
+    return sorted(
+        p for p in api_dir.rglob("*.rs") if "target" not in p.relative_to(api_dir).parts
+    )
+
+
+def called_helpers(api_dir: Path, catalog_helpers: set[str]) -> set[str]:
+    """Helper names the mod calls: `host.name(` or `.name(host`."""
+    found: set[str] = set()
+    for rs in sources(api_dir):
+        text = rs.read_text(encoding="utf-8", errors="replace")
+        for m in re.finditer(r"\bhost\.([a-z_0-9]+)\s*\(", text):
+            if m.group(1) in catalog_helpers:
+                found.add(m.group(1))
+        for m in re.finditer(r"\.([a-z_0-9]+)\s*\(\s*host\b", text):
+            if m.group(1) in catalog_helpers:
+                found.add(m.group(1))
+    return found
+
+
+def catalog_helpers(horizon: Path) -> set[str]:
+    path = horizon / "native-hooks.json"
+    if not path.is_file():
+        return set()
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return {h["name"] for h in data.get("helpers", [])}
+
+
 def implemented_hooks(api_dir: Path) -> dict[str, Path]:
     """`fn <name>(&self, ...)` in `impl Hooks for ...` blocks, by name."""
     found: dict[str, Path] = {}
-    for rs in sorted(api_dir.rglob("*.rs")):
+    for rs in sources(api_dir):
         text = rs.read_text(encoding="utf-8", errors="replace")
         for block in re.finditer(r"impl\s+Hooks\s+for\s+\w+\s*\{", text):
             # Walk braces from the impl's opening brace to its match.
@@ -280,6 +349,22 @@ def check(repo: Path, bundle: Path, horizon: Path, rep: Report) -> None:
                 rep.warn(
                     f"{rel}: hook {name!r} has no API number in HOOK_API; "
                     f"look it up in docs/native-mods.md and add it"
+                )
+
+        # The helpers the mod calls set the same floor as the hooks.
+        helpers = called_helpers(api_dir, catalog_helpers(horizon))
+        api = api_of(horizon)
+        for helper in sorted(helpers):
+            if helper in HELPER_API:
+                apis_used[f"helper {helper}"] = HELPER_API[helper]
+            elif helper in UNSTAMPED_HELPERS:
+                if api is not None:
+                    apis_used[f"helper {helper} (unstamped)"] = api
+            else:
+                rep.warn(
+                    f"helper {helper!r} is called but has no API number in "
+                    f"HELPER_API; look it up in docs/native-mods.md and add it, "
+                    f"or list it in UNSTAMPED_HELPERS"
                 )
 
     # --- injections, if any -------------------------------------------------

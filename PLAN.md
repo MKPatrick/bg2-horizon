@@ -230,3 +230,45 @@ supplying the three things the Java loader gave it for free.
 
 Still nothing clicked in a world: that needs the launcher and a JDK. M2 is the
 first milestone where a gadget does something.
+
+### Round 3 (2026-11-11): M2, the first build
+
+The Building Gadget now picks a block and builds a line of it. 47 tests, all
+passing; `cargo check` clean.
+
+- **The raycast runs on the server.** The Java `use` does its own
+  `player.pick(32, …)`, because the range is far past vanilla's reach, and it
+  does it server-side. Horizon's `raycast` and `view_hit` helpers are
+  client-only, so `api/src/ray.rs` is a voxel walk of its own from
+  `entity_eye_position` along `view_vector`. That keeps the build
+  authoritative and needs no network round trip.
+- **In reach, no raycast is needed at all.** `use_item_on` carries the block
+  and face vanilla's own pick found, so a close build is exact; only a click
+  in the air or past the reach falls back to our ray.
+- **The mode geometry is tested against the Java source.** 13 tests on
+  `BuildToMe` alone, each written from `collectWorld`. Two details worth
+  naming: the loop is `i < difference`, so the block in the player's own
+  column is never placed (one block apart places nothing at all), and
+  `(int) yPos` truncates towards zero while `getBlockY()` floors — below y 0
+  those differ, and a test pins it.
+- **`canBeReplaced` is the `minecraft:replaceable` tag**, read with
+  `block_name_in_tag`. The protection check is `may_build`, which exists as a
+  helper even though `can_build`'s API number is still unstamped — so Round 0's
+  note that protection was unavailable was too pessimistic.
+- **One test of mine was wrong, not the code.** `an_unloaded_chunk_ends_the_ray`
+  asserted the ray stops at an unloaded chunk. Vanilla reads those as void air
+  and walks on, and placement is guarded separately, so the test was corrected
+  rather than the walk.
+- **`hooks` is 415 now, not 65.** The helpers a mod calls set the same floor as
+  the hooks it implements, and several this needs (`sneaking`,
+  `block_name_in_tag`, `may_build`, `component`, the equipment helpers) have
+  unstamped `@API:host_bridge@` numbers, so the only version known to carry
+  them is the catalog's own. `tools/check_bundle.py` now scans the source for
+  helper calls and works the floor out itself; that is what caught the 65.
+
+What M2 does differently from the Java mod — the animation, energy, the
+silk-touch drop list, `canSurvive`, and outline versus collision shapes in the
+ray — is written out under M2 in TODO.md rather than left implicit.
+
+Nothing has been clicked in a game yet. That still needs a JDK 25 and the
+launcher.

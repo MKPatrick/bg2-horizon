@@ -5,12 +5,13 @@ An unofficial, in-progress port of
 direwolf20) to [Horizon](https://github.com/horizon-rust/horizon), as a **native
 mod**: Rust compiled into the game, with no Java.
 
-> **Status: M1 done, M2 next.** Not playable yet — no gadget does anything
-> when you click. What exists: the Java → Horizon hook mapping, a trait mod
-> that compiles against Horizon and registers the gadgets' data components,
-> the Java mod's models, textures, names, recipes and loot carried over, and a
-> combined `.hmod` that passes Horizon's own registry check. [PLAN.md](PLAN.md)
-> has the milestones and [TODO.md](TODO.md) the work list.
+> **Status: M2 done, M3 next.** The Building Gadget picks a block
+> (shift-right-click) and builds a line of it in Build to Me mode, taking the
+> materials. Compiled against Horizon with 47 passing tests — but **not yet run
+> in a game**, which needs a JDK 25 and the launcher. The other ten modes, the
+> ghost preview, undo and the screens are still to come.
+> [PLAN.md](PLAN.md) has the milestones and [TODO.md](TODO.md) the work list,
+> including what M2 does differently from the Java mod.
 
 ## Why a rewrite and not a jar
 
