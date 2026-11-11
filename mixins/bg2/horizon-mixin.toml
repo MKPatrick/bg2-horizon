@@ -1,0 +1,30 @@
+# Building Gadgets 2 for Horizon: the native mod.
+#
+# Milestone 1 only registers the mod's content and proves the bundle applies.
+# Every later milestone adds its [[module]] and [[injection]] entries here;
+# docs/hook-map.md says which hook each part of the Java mod lands on.
+[mod]
+id = "buildinggadgets2"
+version = "0.1.0-dev"
+priority = 100
+
+# The Horizon commit this bundle was built and tested on.
+# TODO: pin a Nightly commit (see README, "Build") before the first release.
+[compatibility]
+horizon_revision = "TODO-pin-a-nightly-commit"
+
+# ---------------------------------------------------------------------------
+# The mod's own state: ids, settings, the gadget data components, the packed
+# content mod. Everything else hangs off this module.
+# ---------------------------------------------------------------------------
+[[module]]
+id = "core"
+file = "crates/horizon-client/src/game.rs"
+name = "port_bg2_core"
+source = "core.rs"
+
+# The content mod (bg2-content, packed by tools/make_content_mod.py) is loaded
+# from this bundle at start, so the one .hnmod holds the models and textures too.
+#
+# TODO (M1): add `data/bg2-content.hmod` and the `native_items` / `native_blocks`
+# injections that declare the gadgets, as docs/hook-map.md lists them.

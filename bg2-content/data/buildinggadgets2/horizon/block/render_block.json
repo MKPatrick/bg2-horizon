@@ -1,0 +1,7 @@
+{
+  "template": "minecraft:barrier",
+  "item": false,
+  "properties": {
+    "hardness": 20.0
+  }
+}

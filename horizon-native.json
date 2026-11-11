@@ -1,0 +1,9 @@
+{
+  "game": "26.3",
+  "hooks": 415,
+  "horizon": "TODO-pin-a-nightly-commit",
+  "id": "buildinggadgets2",
+  "mixins": "TODO-pin-a-horizon-mixins-commit",
+  "schema": 1,
+  "version": "0.1.0-dev"
+}

@@ -1,0 +1,13 @@
+# Packed content mod: built from bg2-content by tools/make_content_mod.py.
+mixins/bg2/data/*.hmod
+
+# Horizon's own build output, when a build runs inside this folder.
+/target/
+/native/
+
+# Editors and OSes
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db

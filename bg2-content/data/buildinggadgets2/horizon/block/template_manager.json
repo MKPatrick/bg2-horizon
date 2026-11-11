@@ -1,0 +1,7 @@
+{
+  "template": "minecraft:crafting_table",
+  "item": true,
+  "properties": {
+    "hardness": 2.0
+  }
+}
