@@ -32,7 +32,7 @@ use crate::ray;
 use crate::runs;
 use crate::state;
 use horizon_client::mod_api::{
-    EquipmentSlot, Host, ItemStack, NativeBlockEdit, NativeBlockRun, Text,
+    Host, ItemStack, NativeBlockEdit, NativeBlockRun, NativeServerPlayer, Text,
 };
 
 /// The Java mod's `Config.RAYTRACE_RANGE` default.
@@ -45,6 +45,29 @@ pub struct Built {
     pub placed: u64,
     /// How many positions were dropped for want of materials.
     pub missing: usize,
+}
+
+/// Where the acting player's eyes are, and the block they stand in.
+///
+/// `NativeServerPlayer.position` is the feet, as vanilla's is, so the eyes are
+/// `1.62` above them standing and `1.27` crouching (`Player.getEyeHeight`).
+///
+/// This deliberately does not go through `host.entity(player.entity_id)`:
+/// `entity_id` is documented as "0 when not known", and a hook that only has
+/// the acting player cannot rely on it. Everything needed is on the player.
+fn player_at(host: &dyn Host, player: &NativeServerPlayer) -> (PlayerAt, [f64; 3]) {
+    let feet = player.position;
+    let eye_height = if host.sneaking() { 1.27 } else { 1.62 };
+    let eye = [feet[0], feet[1] + eye_height, feet[2]];
+    let at = PlayerAt {
+        block: [
+            feet[0].floor() as i32,
+            feet[1].floor() as i32,
+            feet[2].floor() as i32,
+        ],
+        eye_y: eye[1],
+    };
+    (at, eye)
 }
 
 /// `GadgetBuilding.onShiftAction`: pick the block the player is looking at.
@@ -63,8 +86,7 @@ pub fn pick(
 ) -> Option<String> {
     let player = host.acting_player()?;
     let settings = state::settings(host, gadget);
-    let entity = host.entity(u32::try_from(player.entity_id).ok()?)?;
-    let eye = entity.eye_position(host)?;
+    let (_, eye) = player_at(host, &player);
 
     let blocks = HostBlocks::new(host, &player.dimension, (player.uuid, &player.name))?;
     let pos = match hit {
@@ -103,13 +125,7 @@ pub fn build(
     let settings = state::settings(host, gadget);
 
     // Where the player is, as a mode reads them.
-    let entity = host.entity(u32::try_from(player.entity_id).ok()?)?;
-    let eye = entity.eye_position(host)?;
-    let block_position = entity.block_position(host)?;
-    let at = PlayerAt {
-        block: block_position,
-        eye_y: eye[1],
-    };
+    let (at, eye) = player_at(host, &player);
 
     let (start, face) = {
         let blocks = HostBlocks::new(host, &player.dimension, (player.uuid, &player.name))?;
@@ -244,27 +260,26 @@ fn tell(host: &mut dyn Host, uuid: u128, key: &str) {
     host.action_bar(uuid, Text::translate(key, &[]));
 }
 
-/// Write a changed gadget back into the hand that holds it.
+/// Write a changed gadget back into the slot that holds it.
 ///
 /// The use hooks hand out the stack behind a shared reference, so a change to
-/// it would be thrown away. `BaseGadget.getGadget` looks in the main hand and
-/// then the off hand; this writes back to whichever really holds the gadget.
+/// a clone of it would be thrown away. `Host::carried_stack` gives the acting
+/// player's own slot to change, and their client is told — no entity handle
+/// involved, which matters because `entity_id` may be 0 in a use hook.
+///
+/// The hotbar is slots 0 to 8, as `native_inventory_tick` numbers them; the
+/// first slot holding this item wins, as `BaseGadget.getGadget` takes the main
+/// hand before the off hand.
 pub fn put_back(host: &mut dyn Host, stack: ItemStack) -> bool {
-    let Some(player) = host.acting_player() else {
-        return false;
-    };
-    let Some(entity) = u32::try_from(player.entity_id).ok().and_then(|id| host.entity(id)) else {
-        return false;
-    };
-    let Some(living) = host.living(entity) else {
-        return false;
-    };
-    for slot in [EquipmentSlot::MainHand, EquipmentSlot::OffHand] {
+    for slot in 0..9 {
         let holds = host
-            .living_equipment(living, slot)
+            .carried_stack(slot)
             .is_some_and(|s| s.item == stack.item);
         if holds {
-            return host.living_set_equipment(living, slot, Some(stack));
+            if let Some(slot_stack) = host.carried_stack(slot) {
+                *slot_stack = stack;
+                return true;
+            }
         }
     }
     false

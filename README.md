@@ -5,11 +5,12 @@ An unofficial, in-progress port of
 direwolf20) to [Horizon](https://github.com/horizon-rust/horizon), as a **native
 mod**: Rust compiled into the game, with no Java.
 
-> **Status: M2 done, M3 next.** The Building Gadget picks a block
-> (shift-right-click) and builds a line of it in Build to Me mode, taking the
-> materials. Compiled against Horizon with 47 passing tests — but **not yet run
-> in a game**, which needs a JDK 25 and the launcher. The other ten modes, the
-> ghost preview, undo and the screens are still to come.
+> **Status: M2 done and played, M3 next.** The Building Gadget picks a block
+> (shift-right-click, at up to 32 blocks) and builds a line of it in Build to
+> Me mode, taking the materials. **Verified in a running game** on a native
+> build: 9 blocks placed where the unit tests said, and `placed: 5, missing: 4`
+> with only 5 stone in the bag. The other ten modes, the ghost preview, undo
+> and the screens are still to come.
 > [PLAN.md](PLAN.md) has the milestones and [TODO.md](TODO.md) the work list,
 > including what M2 does differently from the Java mod.
 

@@ -317,3 +317,73 @@ What it did turn up is the thing that mattered:
 build itself has not been run: it compiles unsandboxed code into the game, and
 `--trust-native-code` is the player's decision, which docs/native-mods.md says
 in as many words ("never an agent's").
+
+### Round 5 (2026-11-11): the first native build
+
+It built. `native-fdc87ae-1b11ed4f2ae7`, 6 min 25 s on the `dev` profile, with
+`mod-buildinggadgets2` as crate 388 of 390 and `left_out: []` — nothing
+refused. The instance `horizon` plays it, and JEI came along
+(`mods: buildinggadgets2 0.1.0, justenoughitems 1.1.0`).
+
+Two things had to be learnt on the way, neither of them in the docs' build
+section:
+
+- **A native mod has to be turned on.** The first attempt answered "Up to date
+  (no build needed)" and silently reused the old build. `docs/native-mods.md`
+  says native mods "are always on in the launcher: there is no switch", but the
+  instance's `horizon-mods.txt` lists them like content mods, and only the ones
+  listed are built: it held `mod.justenoughitems:true` and nothing else, which
+  is also why `jei.hnmod` had been sitting there unbuilt. Adding
+  `mod.buildinggadgets2:true` was all it took.
+- **This launcher takes a combined `.hmod`'s code and ignores its content.**
+  The packed file went into `horizon-native-mods/` and its code compiled, but
+  the built version has no `native-content/buildinggadgets2/`, so the blocks
+  and items would not have existed — and a trait mod cannot declare them in
+  code. `docs/api/mod-files.md` warns that "a combined file needs a launcher
+  and game with native `.hmod` support"; this launcher evidently has the code
+  half only. So the content goes in the ordinary way as well:
+  `bg2-content/target/horizon-mod/buildinggadgets2.hmod` into the instance's
+  `horizon-mods/`. `tools/pack_mod.py` still writes the combined file for a
+  registry release, but a local test needs both halves installed.
+
+### Round 6 (2026-11-11): played
+
+The first native build ran, and M1 and M2 are checked in a world rather than
+only compiled. `horizon-ctl` drove it: it reads the game's state as JSON and
+acts like a player, so every step below is a command and a reading, not a
+screenshot of someone clicking.
+
+What held:
+
+- `/give buildinggadgets2:gadget_building` → "Gave 1 [Building Gadget]". The
+  id, the lang file's name and the Java mod's own texture all came through.
+- Shift-right-click at a block **10 blocks away** — past vanilla's 5-block
+  reach, so nothing but our own raycast could have found it — set
+  `buildinggadgets2:gadget_blockstate` to `minecraft:stone`.
+- Right-click then placed **9 blocks, at x 98..106, with the player at x 97**.
+  That is exactly what `builds_a_line_towards_the_player_and_stops_one_short`
+  predicted from reading `BuildToMe.collectWorld`: `difference` is 10, the loop
+  is `i < difference`, and the player's own column stays empty. The unit test
+  and the running game agree block for block.
+- In survival with 5 stone: `Built { placed: 5, missing: 4 }`, five blocks
+  placed nearest the target and the stone gone from the inventory.
+
+Three things cost time and are worth remembering:
+
+- **A diagnostic earns its keep.** The first in-game try did nothing at all and
+  said nothing. One `eprintln!` per click — which hook fired, what the player
+  looked like, what the gadget held — turned that into an answer immediately.
+  It also goes to the game's stdout log beside the control socket
+  (`%TEMP%\horizon-control.log`), not to `logs/latest.log`.
+- **My first diagnosis was wrong.** The silent failure looked like
+  `player.entity_id` being 0, since the docs say it can be; the log showed it
+  was 1 all along. The real causes were in the test harness: the agent pressed
+  sneak and clicked in the same millisecond, so the server had not seen the
+  sneak yet, and a mouse-wheel scroll had moved the hotbar off the gadget. The
+  rewrite away from `entity_id` is still the better code — `carried_stack`
+  writes the picked block back without any entity handle — but it fixed
+  nothing.
+- **The launcher builds the installed file, not the source.** An edit followed
+  by `native-build` answers "Up to date (no build needed)". Every change has to
+  be packed and copied into the instance again; `tools/dev_install.py` does the
+  three steps (pack, install both halves, turn the mod on).

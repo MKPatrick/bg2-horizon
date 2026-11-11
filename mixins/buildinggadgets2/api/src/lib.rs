@@ -53,19 +53,36 @@ fn clicked(
     stack: &ItemStack,
     hit: Option<([i32; 3], [i32; 3])>,
 ) -> bool {
+    // While the port has had no in-game run yet, every click says what it did
+    // in the game's log: whether the hook fired at all, which way it went and
+    // why nothing happened. Take it out once the milestones are checked in a
+    // world (TODO.md, M2).
+    let sneaking = host.sneaking();
+    eprintln!(
+        "buildinggadgets2: click item={} sneaking={sneaking} hit={hit:?}          player={:?} state={:?}",
+        stack.item,
+        host.acting_player().map(|p| (p.name, p.position, p.yaw, p.pitch, p.entity_id)),
+        state::block_state(host, stack),
+    );
+
     // `Player.isShiftKeyDown`, which the Java mod branches on in `use`.
-    if host.sneaking() {
-        let Some(state) = build::pick(host, stack, hit.map(|(pos, _)| pos)) else {
+    if sneaking {
+        let picked = build::pick(host, stack, hit.map(|(pos, _)| pos));
+        eprintln!("buildinggadgets2: pick -> {picked:?}");
+        let Some(state) = picked else {
             return false;
         };
         // The hooks hand out the stack behind a shared reference, so the pick
         // is written back into the hand that holds the gadget.
         let mut held = stack.clone();
         state::set_block_state(host, &mut held, &state);
-        build::put_back(host, held);
+        let written = build::put_back(host, held);
+        eprintln!("buildinggadgets2: picked {state}, written back = {written}");
         return true;
     }
-    build::build(host, stack, hit).is_some()
+    let built = build::build(host, stack, hit);
+    eprintln!("buildinggadgets2: build -> {built:?}");
+    built.is_some()
 }
 
 impl Hooks for BuildingGadgets2 {

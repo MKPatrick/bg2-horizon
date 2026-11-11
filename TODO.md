@@ -52,9 +52,11 @@ needs is in [docs/hook-map.md](docs/hook-map.md).
       `minecraft:enchantable {"value": 3}`, as `.enchantable(3)` gives it.
 - [x] `tools/pack_mod.py`: content and code in one `.hmod`, passing
       `cargo horizon-mod check` as `native-mod … for 26.3`.
-- [ ] **Needs the launcher:** check in game — the creative tab, the 8 items
-      with the right models and names, the template manager placeable, a gadget
-      craftable.
+- [x] Checked in game: `/give buildinggadgets2:gadget_building` answers
+      "Gave 1 [Building Gadget]" — the id, the lang file's name and the item's
+      own texture all come through, and the game logs "content from 1 mod(s)".
+- [ ] Still unchecked in game: the creative tab, the template manager placed,
+      and a gadget crafted at a table.
 - [ ] The render block's look is `minecraft:barrier` with hardness 20. Enough
       until M10 puts the build animation on it; revisit then.
 
@@ -83,8 +85,17 @@ needs is in [docs/hook-map.md](docs/hook-map.md).
 - [x] Shift-right-click picks the block looked at
       (`GadgetBuilding.onShiftAction`), written back into the hand that holds
       the gadget.
-- [ ] **Needs the launcher:** check in game — a line of blocks placed,
-      materials consumed, surviving a reload.
+- [x] Checked in game, on the first native build:
+      shift-right-click at **10 blocks** (past vanilla's 5-block reach, so our
+      own raycast did it) set `buildinggadgets2:gadget_blockstate` to
+      `minecraft:stone`; right-click then placed **9 blocks**, at x 98..106
+      with the player at x 97 — the run stops one short, exactly as
+      `builds_a_line_towards_the_player_and_stops_one_short` predicted.
+      In survival with 5 stone: `placed: 5, missing: 4` and all 5 consumed.
+- [ ] Still unchecked: that a build survives a save and reload.
+- [ ] Take the per-click `eprintln!` diagnostic out of `lib.rs` (it writes a
+      line to the game's log on every gadget click; it earned its keep finding
+      the hook was firing, and M3 will want it again).
 
 ### What M2 does differently from the Java mod
 
