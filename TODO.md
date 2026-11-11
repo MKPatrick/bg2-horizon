@@ -173,7 +173,15 @@ places; the second makes them look like blocks.
       `world_primitives` — which a trait mod reaches, where a mixin bundle
       would not.
 - [x] The Exchanger's ghosts in their own colour.
-- [ ] **In game:** that the preview shows exactly what the click then places.
+- [x] **In game:** grid at range 6 drew its ghost cubes and the bounding
+      outline, and the click then placed stone at the same nine positions
+      (x 100/107/114 by z -29/-22/-15, spacing 7 as the formula gives).
+      horizontal_wall at range 7 drew its slab. The preview and the build
+      agree.
+- [ ] A dense mode's ghosts stack their alpha, so a 7x7 wall reads as one
+      green slab rather than 49 blocks. The Java mod's translucent models do
+      the same, so this may be right; worth a look once half two draws real
+      blocks.
 
 ### Half two: textured ghost blocks
 

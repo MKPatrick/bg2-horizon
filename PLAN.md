@@ -426,3 +426,35 @@ Left for later: the anchor, which `BaseMode.collect` takes instead of the mode
 when it is set; `has_block_entity`, which is a list of vanilla names in
 `host_world.rs` because `block_entity_nbt` wants a mutable host; and
 `removeUnConnected`'s order, sorted here against Java's arbitrary `HashSet`.
+
+### Round 8 (2026-11-11): the preview, half one
+
+The gadget shows what it would build. Not textured block models yet — a
+translucent box per position and one outline around the build, through
+`world_primitives`, which is free to a trait mod and would not have been to a
+mixin bundle.
+
+Checked by building what it drew: grid at range 6 drew its lattice of ghost
+cubes, and the click placed stone at the same nine positions (x 100/107/114
+by z -29/-22/-15, spacing 7, which is what `((7-2)%6)+2` gives). The two
+screenshots line up block for block.
+
+The interesting part was that this is the first hook on the client, and the
+client cannot answer what the server can:
+
+- `Host::level` is None there, so there is no whole-state read and no
+  `minecraft:replaceable` tag. The preview reads block names with
+  `Host::block` and decides "can I build over this?" from collision instead.
+  Air and solid blocks agree, which covers every ordinary case; a
+  tagged-but-colliding block and Surface's "same block behind?" test can
+  differ by a block. The server still decides what is placed, so a build is
+  never wrong — only the drawing can be.
+- `Host::raycast` is the client's own view pick and crosses a block's outline
+  as vanilla does, which is better than the server's voxel walk. It carries
+  no face, so `face_of` takes the face from the hit point.
+- Protection is not readable on a client, so the preview does not grey out a
+  protected position.
+
+Half two is the textured ghosts: a wgpu pass from `world_drawn` with
+`block_sprites`, the way AE2's `ae2_draw.rs` already does it. What the
+preview shows is right; what is left is how it looks.
