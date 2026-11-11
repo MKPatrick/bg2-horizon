@@ -20,8 +20,9 @@ pub const GADGETS: [&str; 5] = [
     "gadget_destruction",
 ];
 
-/// The other items the mod adds.
-pub const ITEMS: [&str; 3] = ["template", "redprint", "template_manager"];
+/// The other items the mod adds. The template manager's item comes from its
+/// block declaration (`"item": true`), not from a declaration of its own.
+pub const ITEMS: [&str; 2] = ["template", "redprint"];
 
 /// The blocks the mod adds: the template manager, and the temporary block the
 /// build animation runs on (`RenderBlock` in the Java mod).

@@ -12,8 +12,9 @@ one this port needs decides `horizon-native.json`'s `hooks`.
 
 | Java | Horizon | API |
 |---|---|---|
-| `DeferredRegister` ITEMS, 8 items | `native_items`, plus `bg2-content`'s `horizon/item/*.json` | 145 |
+| `DeferredRegister` ITEMS, 7 plain items | `native_items`, plus `bg2-content`'s `horizon/item/*.json` | 145 |
 | `DeferredRegister` BLOCKS, `render_block` + `template_manager` | `native_blocks`, plus `horizon/block/*.json` | 145 |
+| `BlockItem` for the template manager | the block's own declaration: `"item": true` (the default). A block's item is **not** a separate `horizon/item/` file — `render_block` sets `"item": false` instead | 145 |
 | `BG2DataComponents`: 15 fixed components, 7 toggles, 6 numbers | `native_component_types`, then `native_component` / `native_set_component` / `native_remove_component` | 65 |
 | `BlockEntityType` `RenderBlockBE`, `TemplateManagerBE` | `native_block_entity`, `native_block_entity_ticks`, `native_block_entity_tick` | 15 |
 | `TemplateManagerContainer` (`MenuType`) | `native_block_entity_container` + `horizon/menu/template_manager.json` | 16, 17 |

@@ -36,8 +36,10 @@ needs is in [docs/hook-map.md](docs/hook-map.md).
       (`cargo horizon-mod build`, then `cargo horizon-mod check`), put the
       result in `mixins/bg2/data/bg2-content.hmod`, and load it from the bundle
       at start.
-- [ ] `native_items` and `native_blocks` (API 145): declare the 8 items and 2
-      blocks in code so they exist even if the content mod's files change.
+- [ ] `native_items` and `native_blocks` (API 145): declare the 7 plain items
+      and the 2 blocks in code so they exist even if the content mod's files
+      change. The template manager's item comes from its block
+      (`"item": true`), and `render_block` sets `"item": false`.
 - [ ] Check in game: the creative tab, the 8 items with the right models and
       names, the template manager placeable.
 
